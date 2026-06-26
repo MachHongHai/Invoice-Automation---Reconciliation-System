@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import shutil
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ VENDOR_COLUMNS = [
     "email",
     "phone",
     "category",
+    "business_line",
     "status",
 ]
 
@@ -53,6 +55,9 @@ INVOICE_COLUMNS = [
     "vendor_name",
     "vendor_tax_code",
     "vendor_bank_account",
+    "vendor_address",
+    "vendor_phone",
+    "business_line",
     "buyer_name",
     "buyer_tax_code",
     "subtotal",
@@ -168,28 +173,40 @@ def generate_vendors() -> list[dict[str, Any]]:
         "tap_vu",
     ]
     names = [
-        "Chi Lan Moi Thit",
-        "Bac Hai Rau Cu",
-        "Co Huong Hai San",
-        "Anh Nam Ga Vit",
-        "Dai Ly Bia Hung Phat",
-        "Gas Petrolimex CN3",
-        "Nuoc Da Tuan Ngoc",
-        "Bao Bi Gia Phat",
-        "Sieu Thi Nguyen Lieu An Phu",
-        "Dien Luc Dong Da",
+        "Hộ Kinh Doanh Chị Lan Thịt Sạch",
+        "Cửa Hàng Rau Củ Bác Hải",
+        "Công Ty TNHH Hải Sản Cô Hương",
+        "Trang Trại Gà Vịt Anh Nam",
+        "Đại Lý Bia Nước Giải Khát Hưng Phát",
+        "Công Ty Gas Petrolimex Chi Nhánh 3",
+        "Cơ Sở Nước Đá Tuấn Ngọc",
+        "Công Ty TNHH Bao Bì Gia Phát",
+        "Siêu Thị Nguyên Liệu An Phú",
+        "Công Ty Điện Lực Đông Đa",
     ]
     holders = [
-        "NGUYEN THI LAN",
-        "TRAN VAN HAI",
-        "LE THI HUONG",
-        "PHAM VAN NAM",
-        "CONG TY TNHH BIA HUNG PHAT",
-        "CONG TY PETROLIMEX CN3",
-        "HKD NUOC DA TUAN NGOC",
-        "CONG TY TNHH BAO BI GIA PHAT",
-        "CONG TY TNHH NGUYEN LIEU AN PHU",
-        "CONG TY DIEN LUC DONG DA",
+        "NGUYỄN THỊ LAN",
+        "TRẦN VĂN HẢI",
+        "CÔNG TY TNHH HẢI SẢN CÔ HƯƠNG",
+        "PHẠM VĂN NAM",
+        "ĐẠI LÝ BIA HƯNG PHÁT",
+        "CÔNG TY GAS PETROLIMEX CN3",
+        "HKD NƯỚC ĐÁ TUẤN NGỌC",
+        "CÔNG TY TNHH BAO BÌ GIA PHÁT",
+        "CÔNG TY TNHH NGUYÊN LIỆU AN PHÚ",
+        "CÔNG TY ĐIỆN LỰC ĐÔNG ĐA",
+    ]
+    business_lines = [
+        "Thịt heo, bò, gà sơ chế",
+        "Rau củ quả tươi Đà Lạt",
+        "Hải sản tươi sống",
+        "Gà vịt, trứng gia cầm",
+        "Bia, nước giải khát",
+        "Gas bếp công nghiệp",
+        "Nước đá tinh khiết",
+        "Bao bì, hộp giấy, ly nhựa",
+        "Gia vị và nguyên liệu bếp",
+        "Điện nước dịch vụ",
     ]
     vendors = []
     for index, name in enumerate(names, start=1):
@@ -197,7 +214,7 @@ def generate_vendors() -> list[dict[str, Any]]:
             {
                 "vendor_id": f"V{index:03d}",
                 "vendor_name": name,
-                "vendor_short_name": name.split()[-2] + " " + name.split()[-1],
+                "vendor_short_name": " ".join(name.split()[-3:]),
                 "tax_code": f"03{index:08d}",
                 "bank_account": f"{1234567890000 + index * 1111111}",
                 "bank_name": ["Vietcombank", "ACB", "BIDV", "Techcombank", "VPBank"][index % 5],
@@ -206,6 +223,7 @@ def generate_vendors() -> list[dict[str, Any]]:
                 "email": f"contact{index:02d}@finrecon-demo.example",
                 "phone": f"09000000{index:02d}",
                 "category": categories[index - 1],
+                "business_line": business_lines[index - 1],
                 "status": "active",
             }
         )
@@ -293,33 +311,41 @@ def generate_invoice_register(vendors: list[dict[str, Any]]) -> list[dict[str, A
                 vendor_name = "Cong ty Khong Ton Tai"
         if case in {"approved_but_unpaid", "amount_mismatch_after_payment", "unusual_amount"}:
             invoice_status = "approved_for_payment"
-        invoices.append(
-            {
-                "invoice_id": invoice_id,
-                "invoice_number": invoice_number,
-                "invoice_series": invoice_series,
-                "invoice_template_code": invoice_template_code,
-                "document_type": document_type,
-                "invoice_date": invoice_date.isoformat(),
-                "due_date": due_date_value,
-                "vendor_id": vendor_id,
-                "vendor_name": vendor_name,
-                "vendor_tax_code": vendor_tax_code,
-                "vendor_bank_account": vendor_bank_account,
-                "buyer_name": buyer["buyer_name"],
-                "buyer_tax_code": buyer["buyer_tax_code"],
-                "subtotal": subtotal,
-                "vat_rate": vat_for_invoice,
-                "vat_amount": vat_amount,
-                "total_amount": total_amount,
-                "currency": config["currency"],
-                "invoice_status": invoice_status,
-                "source_type": document_type,
-                "attachment_file": attachment_file,
-                "e_invoice_file": e_invoice_file,
-                "expected_case": case,
-            }
-        )
+        row = {
+            "invoice_id": invoice_id,
+            "invoice_number": invoice_number,
+            "invoice_series": invoice_series,
+            "invoice_template_code": invoice_template_code,
+            "document_type": document_type,
+            "invoice_date": invoice_date.isoformat(),
+            "due_date": due_date_value,
+            "vendor_id": vendor_id,
+            "vendor_name": vendor_name,
+            "vendor_tax_code": vendor_tax_code,
+            "vendor_bank_account": vendor_bank_account,
+            "vendor_address": vendor.get("address", ""),
+            "vendor_phone": vendor.get("phone", ""),
+            "category": vendor.get("category", ""),
+            "business_line": vendor.get("business_line", ""),
+            "buyer_name": buyer["buyer_name"],
+            "buyer_tax_code": buyer["buyer_tax_code"],
+            "subtotal": subtotal,
+            "vat_rate": vat_for_invoice,
+            "vat_amount": vat_amount,
+            "total_amount": total_amount,
+            "currency": config["currency"],
+            "invoice_status": invoice_status,
+            "source_type": document_type,
+            "attachment_file": attachment_file,
+            "e_invoice_file": e_invoice_file,
+            "expected_case": case,
+        }
+        line_items = build_receipt_items(row, target_amount=subtotal)
+        row["line_items"] = line_items
+        row["subtotal"] = sum(float(item["amount"]) for item in line_items)
+        row["vat_amount"] = round(row["subtotal"] * vat_for_invoice)
+        row["total_amount"] = row["subtotal"] + row["vat_amount"]
+        invoices.append(row)
     write_csv(RAW_DIR / "invoice_register.csv", invoices, INVOICE_COLUMNS)
     write_xlsx(RAW_DIR / "invoice_register.xlsx", invoices, INVOICE_COLUMNS, "InvoiceRegister")
     return invoices
@@ -333,10 +359,24 @@ def build_vietnam_einvoice_xml(invoice: dict[str, Any]) -> str:
     is_vat = invoice["document_type"] == "vat_einvoice"
     invoice_title = "HOA DON GIA TRI GIA TANG" if is_vat else "HOA DON BAN HANG"
     tax_rate = f"{float(invoice['vat_rate']) * 100:.0f}%" if is_vat else "KCT"
-    item_name = "Nguyen lieu thuc pham F&B" if is_vat else "Hang hoa ban le cho nha hang"
     subtotal = float(invoice["subtotal"])
     vat_amount = float(invoice["vat_amount"] or 0)
     total = float(invoice["total_amount"])
+    items = build_receipt_items(invoice, target_amount=subtotal, max_lines=5)
+    item_xml = "\n".join(
+        f"""        <HHDVu>
+          <TChat>1</TChat>
+          <STT>{index}</STT>
+          <THHDVu>{escape(str(item["name"]))}</THHDVu>
+          <DVTinh>{escape(str(item["unit"]))}</DVTinh>
+          <SLuong>{float(item["quantity"]):g}</SLuong>
+          <DGia>{float(item["unit_price"]):.0f}</DGia>
+          <ThTien>{float(item["amount"]):.0f}</ThTien>
+          <TSuat>{tax_rate}</TSuat>
+          <TThue>{float(item["amount"]) * float(invoice["vat_rate"] or 0):.0f}</TThue>
+        </HHDVu>"""
+        for index, item in enumerate(items, start=1)
+    )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <HDon>
   <DLHDon>
@@ -364,17 +404,7 @@ def build_vietnam_einvoice_xml(invoice: dict[str, Any]) -> str:
         <MST>{escape(str(invoice["buyer_tax_code"]))}</MST>
       </NMua>
       <DSHHDVu>
-        <HHDVu>
-          <TChat>1</TChat>
-          <STT>1</STT>
-          <THHDVu>{escape(item_name)}</THHDVu>
-          <DVTinh>Lo</DVTinh>
-          <SLuong>1</SLuong>
-          <DGia>{subtotal:.0f}</DGia>
-          <ThTien>{subtotal:.0f}</ThTien>
-          <TSuat>{tax_rate}</TSuat>
-          <TThue>{vat_amount:.0f}</TThue>
-        </HHDVu>
+{item_xml}
       </DSHHDVu>
       <TToan>
         <TgTCThue>{subtotal:.0f}</TgTCThue>
@@ -417,6 +447,136 @@ def money_vn(value: Any) -> str:
     return f"{float(value or 0):,.0f}".replace(",", ".")
 
 
+FNB_ITEM_CATALOG: dict[str, list[tuple[str, str, float]]] = {
+    "thit": [
+        ("Thịt ba chỉ heo", "kg", 125_000),
+        ("Sườn non heo", "kg", 145_000),
+        ("Nạc vai heo", "kg", 118_000),
+        ("Xương ống nấu nước dùng", "kg", 58_000),
+        ("Mỡ heo thắng tóp", "kg", 42_000),
+    ],
+    "rau": [
+        ("Rau muống", "kg", 18_000),
+        ("Cải thìa", "kg", 28_000),
+        ("Xà lách Đà Lạt", "kg", 38_000),
+        ("Hành lá", "kg", 42_000),
+        ("Cà chua", "kg", 24_000),
+        ("Khoai tây", "kg", 26_000),
+    ],
+    "hai san": [
+        ("Tôm thẻ loại 40 con", "kg", 185_000),
+        ("Mực ống tươi", "kg", 210_000),
+        ("Cá diêu hồng", "kg", 82_000),
+        ("Nghêu sống", "kg", 48_000),
+        ("Cá basa phi lê", "kg", 96_000),
+    ],
+    "ga": [
+        ("Gà ta làm sạch", "kg", 112_000),
+        ("Cánh gà", "kg", 88_000),
+        ("Đùi gà góc tư", "kg", 72_000),
+        ("Vịt làm sạch", "kg", 98_000),
+        ("Trứng gà", "khay", 78_000),
+    ],
+    "bia": [
+        ("Bia lon 333", "thùng", 285_000),
+        ("Bia Saigon Special", "thùng", 360_000),
+        ("Nước suối 500ml", "thùng", 78_000),
+        ("Coca Cola lon", "thùng", 190_000),
+        ("Nước ngọt Sprite", "thùng", 188_000),
+    ],
+    "gas": [
+        ("Bình gas công nghiệp 45kg", "bình", 1_450_000),
+        ("Bình gas 12kg", "bình", 430_000),
+        ("Van gas thay thế", "cái", 120_000),
+    ],
+    "nuoc da": [
+        ("Đá viên tinh khiết", "bao", 28_000),
+        ("Đá cây", "cây", 36_000),
+        ("Thùng xốp giữ lạnh", "cái", 55_000),
+    ],
+    "bao bi": [
+        ("Hộp giấy 750ml", "lốc", 95_000),
+        ("Túi nilon quai xách", "kg", 62_000),
+        ("Ly nhựa 500ml", "lốc", 72_000),
+        ("Ống hút giấy", "hộp", 45_000),
+        ("Khăn giấy ăn", "thùng", 210_000),
+    ],
+    "default": [
+        ("Nước mắm 5L", "can", 155_000),
+        ("Dầu ăn 5L", "can", 185_000),
+        ("Đường cát trắng", "kg", 25_000),
+        ("Bột ngọt", "kg", 68_000),
+        ("Gạo thơm", "kg", 22_000),
+        ("Gia vị tổng hợp", "kg", 74_000),
+    ],
+}
+
+
+def item_catalog_for_invoice(invoice: dict[str, Any]) -> list[tuple[str, str, float]]:
+    vendor = normalize_for_catalog(invoice.get("vendor_name"))
+    category = normalize_for_catalog(invoice.get("category") or invoice.get("expected_case"))
+    lookup = f"{vendor} {category}"
+    for key in ("hai san", "thit", "rau", "ga", "bia", "gas", "nuoc da", "bao bi"):
+        if key in lookup:
+            return FNB_ITEM_CATALOG[key]
+    return FNB_ITEM_CATALOG["default"]
+
+
+def normalize_for_catalog(value: Any) -> str:
+    text = str(value or "").lower()
+    replacements = {
+        "á": "a", "à": "a", "ả": "a", "ã": "a", "ạ": "a",
+        "ă": "a", "ắ": "a", "ằ": "a", "ẳ": "a", "ẵ": "a", "ặ": "a",
+        "â": "a", "ấ": "a", "ầ": "a", "ẩ": "a", "ẫ": "a", "ậ": "a",
+        "đ": "d",
+        "é": "e", "è": "e", "ẻ": "e", "ẽ": "e", "ẹ": "e",
+        "ê": "e", "ế": "e", "ề": "e", "ể": "e", "ễ": "e", "ệ": "e",
+        "í": "i", "ì": "i", "ỉ": "i", "ĩ": "i", "ị": "i",
+        "ó": "o", "ò": "o", "ỏ": "o", "õ": "o", "ọ": "o",
+        "ô": "o", "ố": "o", "ồ": "o", "ổ": "o", "ỗ": "o", "ộ": "o",
+        "ơ": "o", "ớ": "o", "ờ": "o", "ở": "o", "ỡ": "o", "ợ": "o",
+        "ú": "u", "ù": "u", "ủ": "u", "ũ": "u", "ụ": "u",
+        "ư": "u", "ứ": "u", "ừ": "u", "ử": "u", "ữ": "u", "ự": "u",
+        "ý": "y", "ỳ": "y", "ỷ": "y", "ỹ": "y", "ỵ": "y",
+    }
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+    return text
+
+
+def build_receipt_items(invoice: dict[str, Any], target_amount: float | None = None, max_lines: int = 6) -> list[dict[str, Any]]:
+    existing_items = invoice.get("line_items")
+    if isinstance(existing_items, list) and existing_items:
+        return existing_items
+    target = float(target_amount if target_amount is not None else invoice.get("total_amount") or invoice.get("subtotal") or 0)
+    if target <= 0:
+        return []
+    catalog = item_catalog_for_invoice(invoice)
+    invoice_index = int(str(invoice.get("invoice_id") or "0").split("-")[-1] or 0)
+    line_count = min(max_lines, max(2, 2 + (invoice_index % 5)))
+    line_count = min(line_count, len(catalog))
+    start = invoice_index % len(catalog)
+    selected = [catalog[(start + offset) % len(catalog)] for offset in range(line_count)]
+
+    weights = [line_count - offset for offset in range(line_count)]
+    items: list[dict[str, Any]] = []
+    for offset, (name, unit, reference_price) in enumerate(selected):
+        raw_amount = target * weights[offset] / sum(weights)
+        quantity = max(1, round(raw_amount / reference_price))
+        unit_price = reference_price
+        amount = quantity * unit_price
+        items.append(
+            {
+                "name": f"{name} ({unit})",
+                "unit": unit,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "amount": amount,
+            }
+        )
+    return items
+
+
 def draw_centered(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], text: str, font: ImageFont.ImageFont) -> None:
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
@@ -425,24 +585,13 @@ def draw_centered(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], tex
     draw.text((x1 + (x2 - x1 - text_width) / 2, y1 + (y2 - y1 - text_height) / 2 - 1), text, fill=(0, 0, 0), font=font)
 
 
-def receipt_item_name(invoice: dict[str, Any]) -> str:
-    category = str(invoice.get("expected_case") or invoice.get("vendor_name") or "").lower()
-    vendor = str(invoice.get("vendor_name") or "").lower()
-    if "thit" in vendor or "ga" in vendor:
-        return "Thịt/gà nhập bếp"
-    if "rau" in vendor:
-        return "Rau củ tươi"
-    if "hai san" in vendor:
-        return "Hải sản tươi"
-    if "bia" in vendor:
-        return "Bia, nước giải khát"
-    if "gas" in vendor:
-        return "Gas bếp"
-    if "bao bi" in vendor:
-        return "Bao bì mang về"
-    if "unusual" in category:
-        return "Nguyên liệu số lượng lớn"
-    return "Nguyên liệu F&B"
+def fit_font(text: str, max_width: int, size: int, bold: bool = False, min_size: int = 10) -> ImageFont.ImageFont:
+    for candidate_size in range(size, min_size - 1, -1):
+        font = load_font(candidate_size, bold=bold)
+        bbox = ImageDraw.Draw(Image.new("RGB", (1, 1))).textbbox((0, 0), text, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            return font
+    return load_font(min_size, bold=bold)
 
 
 def draw_receipt_image(invoice: dict[str, Any], path: Path) -> None:
@@ -456,17 +605,19 @@ def draw_receipt_image(invoice: dict[str, Any], path: Path) -> None:
     tiny_font = load_font(13)
 
     vendor_name = str(invoice.get("vendor_name") or "TÊN CỬA HÀNG").upper()
-    if len(vendor_name) > 22:
-        vendor_name = vendor_name[:22]
-    draw.text((42, 9), vendor_name, fill=(0, 0, 0), font=title_font)
+    draw.text((18, 9), vendor_name, fill=(0, 0, 0), font=fit_font(vendor_name, 250, 17, bold=True, min_size=10))
     draw.text((294, 9), "HÓA ĐƠN BÁN HÀNG", fill=(0, 0, 0), font=title_font)
-    draw.text((16, 36), "Địa chỉ:........................", fill=(0, 0, 0), font=small_font)
-    draw.text((17, 57), "ĐT:..............................", fill=(0, 0, 0), font=small_font)
-    draw.text((220, 47), "Mặt hàng bán (Hoặc ngành nghề kinh doanh)", fill=(0, 0, 0), font=small_font)
+    vendor_address = str(invoice.get("vendor_address") or invoice.get("address") or "Chợ đầu mối / nhà cung cấp F&B")
+    vendor_phone = str(invoice.get("vendor_phone") or invoice.get("phone") or "0900 000 000")
+    draw.text((16, 36), f"Địa chỉ: {vendor_address[:24]}", fill=(0, 0, 0), font=small_font)
+    draw.text((17, 57), f"ĐT: {vendor_phone}", fill=(0, 0, 0), font=small_font)
+    business_line = str(invoice.get("business_line") or "Hàng hóa, nguyên liệu nhà hàng")
+    business_text = f"Mặt hàng bán: {business_line}"
+    draw.text((220, 47), business_text, fill=(0, 0, 0), font=fit_font(business_text, 330, 14, min_size=10))
 
-    draw.text((15, 103), f"Tên khách hàng: {invoice.get('buyer_name') or ''}", fill=(0, 0, 0), font=small_font)
-    draw.line((124, 128, 550, 128), fill=(0, 0, 0), width=1)
-    draw.text((15, 123), "Địa chỉ", fill=(0, 0, 0), font=small_font)
+    buyer_name = str(invoice.get("buyer_name") or "Nhà hàng FinRecon")
+    draw.text((15, 103), f"Tên khách hàng: {buyer_name[:52]}", fill=(0, 0, 0), font=small_font)
+    draw.text((15, 119), "Địa chỉ: 12 Nguyễn Huệ, Q.1, TP.HCM", fill=(0, 0, 0), font=small_font)
 
     x_cols = [14, 58, 214, 297, 418, 560]
     y_top = 137
@@ -486,13 +637,16 @@ def draw_receipt_image(invoice: dict[str, Any], path: Path) -> None:
     draw_centered(draw, (297, y_top, 418, y_top + header_h), "ĐƠN GIÁ", bold_font)
     draw_centered(draw, (418, y_top, 560, y_top + header_h), "THÀNH TIỀN", bold_font)
 
-    item_total = float(invoice.get("subtotal") or invoice.get("total_amount") or 0)
-    quantity = 1 if item_total < 2_000_000 else 2
-    unit_price = item_total / quantity if quantity else item_total
-    rows = [
-        ("1", receipt_item_name(invoice), str(quantity), money_vn(unit_price), money_vn(item_total)),
-    ]
-    for index in range(2, 11):
+    rows = []
+    items = build_receipt_items(invoice, target_amount=float(invoice.get("total_amount") or invoice.get("subtotal") or 0))
+    for index, item in enumerate(items[:10], start=1):
+        quantity = item["quantity"]
+        quantity_text = f"{quantity:.1f}".rstrip("0").rstrip(".") if isinstance(quantity, float) else str(quantity)
+        item_name = str(item["name"])
+        if len(item_name) > 25:
+            item_name = item_name[:24] + "."
+        rows.append((str(index), item_name, quantity_text, money_vn(item["unit_price"]), money_vn(item["amount"])))
+    for index in range(len(rows) + 1, 11):
         rows.append((str(index), "", "", "", ""))
 
     for index, row in enumerate(rows):
@@ -513,7 +667,11 @@ def draw_receipt_image(invoice: dict[str, Any], path: Path) -> None:
     draw.text((313, 429), f"Ngày {invoice_date.day:02d} tháng {invoice_date.month:02d} năm {invoice_date.year}", fill=(0, 0, 0), font=small_font)
     draw.text((28, 465), "KHÁCH HÀNG", fill=(0, 0, 0), font=normal_font)
     draw.text((294, 465), "NGƯỜI BÁN HÀNG", fill=(0, 0, 0), font=normal_font)
-    img.save(path)
+    buffer = io.BytesIO()
+    image_format = "PDF" if path.suffix.lower() == ".pdf" else "PNG"
+    img.save(buffer, format=image_format)
+    path.write_bytes(buffer.getvalue())
+    img.close()
 
 
 def generate_invoice_attachments(invoices: list[dict[str, Any]]) -> list[Path]:
@@ -530,18 +688,18 @@ def generate_invoice_attachments(invoices: list[dict[str, Any]]) -> list[Path]:
             continue
             doc = canvas.Canvas(str(path), pagesize=A4)
             width, height = A4
-            
+
             # Professional border
             doc.setStrokeColorRGB(0.1, 0.3, 0.5)
             doc.setLineWidth(1.5)
             doc.rect(20, 20, width - 40, height - 40)
-            
+
             doc.setFont("Helvetica-Bold", 18)
             doc.setFillColorRGB(0.1, 0.3, 0.5)
             doc.drawCentredString(width / 2, height - 60, "HOA DON GIA TRI GIA TANG")
             doc.setFont("Helvetica", 9)
             doc.drawCentredString(width / 2, height - 75, "(HOA DON DIEN TU / ELECTRONIC INVOICE)")
-            
+
             # Seller info
             doc.setFont("Helvetica-Bold", 10)
             doc.drawString(40, height - 110, "NHA CUNG CAP (SELLER):")
@@ -549,24 +707,24 @@ def generate_invoice_attachments(invoices: list[dict[str, Any]]) -> list[Path]:
             doc.drawString(40, height - 125, f"Nha cung cap: {invoice['vendor_name']}")
             doc.drawString(40, height - 140, f"Ma so thue (MST): {invoice['vendor_tax_code'] or 'N/A'}")
             doc.drawString(40, height - 155, f"So tai khoan: {invoice['vendor_bank_account'] or 'N/A'}")
-            
+
             # Buyer info
             doc.setFont("Helvetica-Bold", 10)
             doc.drawString(40, height - 185, "DON VI MUA HANG (BUYER):")
             doc.setFont("Helvetica", 10)
             doc.drawString(40, height - 200, f"Ten don vi: {invoice['buyer_name']}")
             doc.drawString(40, height - 215, f"Ma so thue (MST): {invoice['buyer_tax_code']}")
-            
+
             # Invoice Info
             doc.drawString(380, height - 110, f"Ky hieu: {invoice.get('invoice_series', 'N/A')}")
             doc.drawString(380, height - 125, f"Mau so: {invoice.get('invoice_template_code', 'N/A')}")
             doc.drawString(380, height - 140, f"Ma phieu: {invoice.get('invoice_number', 'N/A')}")
             doc.drawString(380, height - 155, f"Ngay lap: {invoice['invoice_date']}")
-            
+
             doc.setStrokeColorRGB(0.7, 0.7, 0.7)
             doc.setLineWidth(0.5)
             doc.line(40, height - 230, width - 40, height - 230)
-            
+
             # Items table
             doc.setFont("Helvetica-Bold", 10)
             doc.drawString(40, height - 250, "STT")
@@ -575,44 +733,44 @@ def generate_invoice_attachments(invoices: list[dict[str, Any]]) -> list[Path]:
             doc.drawString(350, height - 250, "Don gia")
             doc.drawString(430, height - 250, "Thanh tien")
             doc.line(40, height - 255, width - 40, height - 255)
-            
+
             subtotal = invoice["subtotal"]
             vat_rate = invoice["vat_rate"]
             vat_amount = invoice["vat_amount"]
             total = invoice["total_amount"]
-            
+
             doc.setFont("Helvetica", 10)
             doc.drawString(40, height - 275, "1")
             doc.drawString(80, height - 275, "Thuc pham gia vi va nguyen lieu F&B")
             doc.drawString(300, height - 275, "1")
             doc.drawString(350, height - 275, f"{subtotal:,.0f}")
             doc.drawString(430, height - 275, f"{subtotal:,.0f}")
-            
+
             doc.line(40, height - 350, width - 40, height - 350)
-            
+
             # Totals
             doc.drawString(300, height - 370, "Cong tien hang (Subtotal):")
             doc.drawRightString(width - 40, height - 370, f"{subtotal:,.0f} VND")
-            
+
             doc.drawString(300, height - 385, "Thue suat VAT (Tax %):")
             doc.drawRightString(width - 40, height - 385, f"{vat_rate * 100:.0f}%")
-            
+
             doc.drawString(300, height - 400, "Tien thue VAT (Tax amount):")
             doc.drawRightString(width - 40, height - 400, f"{vat_amount:,.0f} VND")
-            
+
             doc.setFont("Helvetica-Bold", 11)
             doc.drawString(300, height - 420, "TONG CONG THANH TOAN:")
             doc.drawRightString(width - 40, height - 420, f"{total:,.0f} VND")
-            
+
             doc.line(40, height - 430, width - 40, height - 430)
-            
+
             doc.setFont("Helvetica-Bold", 9)
             doc.drawString(100, height - 460, "NGUOI MUA HANG")
             doc.drawCentredString(width - 150, height - 460, "NGUOI BAN HANG")
             doc.setFont("Helvetica", 8)
             doc.drawString(80, height - 475, "(Ky, ghi ro ho ten)")
             doc.drawCentredString(width - 150, height - 475, "(Ky so dien tu, ngay ky)")
-            
+
             doc.save()
         paths.append(path)
     return paths

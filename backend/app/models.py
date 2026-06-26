@@ -130,6 +130,8 @@ class Invoice(Base):
     vendor_name: Mapped[str | None] = mapped_column(String(255))
     vendor_tax_code: Mapped[str | None] = mapped_column(String(64))
     vendor_bank_account: Mapped[str | None] = mapped_column(String(64))
+    vendor_address: Mapped[str | None] = mapped_column(Text)
+    vendor_phone: Mapped[str | None] = mapped_column(String(64))
     buyer_name: Mapped[str | None] = mapped_column(String(255))
     buyer_tax_code: Mapped[str | None] = mapped_column(String(64))
     invoice_date: Mapped[datetime | None] = mapped_column(Date)
@@ -153,6 +155,8 @@ class Invoice(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
+    items: Mapped[list[InvoiceItem]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
+
 
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
@@ -164,6 +168,8 @@ class InvoiceItem(Base):
     unit_price: Mapped[float | None] = mapped_column(Float)
     amount: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    invoice: Mapped[Invoice] = relationship(back_populates="items")
 
 
 class BankTransaction(Base):

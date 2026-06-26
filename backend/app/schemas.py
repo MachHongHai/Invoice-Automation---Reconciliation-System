@@ -7,6 +7,11 @@ class InvoicePayload(BaseModel):
     invoice_number: str | None = None
     vendor_name: str | None = None
     vendor_tax_code: str | None = None
+    vendor_bank_account: str | None = None
+    vendor_address: str | None = None
+    vendor_phone: str | None = None
+    buyer_name: str | None = None
+    buyer_tax_code: str | None = None
     invoice_date: str | None = None
     due_date: str | None = None
     subtotal: float | None = None

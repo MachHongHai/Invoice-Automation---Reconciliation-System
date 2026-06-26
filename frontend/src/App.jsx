@@ -11,6 +11,19 @@ import {
   Settings2,
   Upload,
   WandSparkles,
+  Sun,
+  Moon,
+  Trash2,
+  Activity,
+  FileCheck,
+  CreditCard,
+  AlertCircle,
+  Eye,
+  Loader2,
+  ChevronRight,
+  Database,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 
 const API_BASE =
@@ -48,25 +61,13 @@ const statusLabels = {
   partially_matched: "Cần review",
   amount_mismatch: "Lệch tiền",
   unmatched_invoice: "Hóa đơn chưa thanh toán",
-  unmatched_approved_invoice: "Duyệt nhưng chưa thanh toán",
-  unmatched_transaction: "Giao dịch thiếu hóa đơn",
-  unmatched_bank_transaction: "Giao dịch thiếu payment",
-  duplicate_invoice: "Hóa đơn trùng",
-  vendor_not_found: "Không có vendor",
-  vendor_bank_mismatch: "Sai tài khoản vendor",
-  vendor_mismatch: "Sai vendor",
-  unusual_amount: "Số tiền bất thường",
-  date_mismatch: "Lệch ngày",
-  missing_required_field: "Thiếu dữ liệu",
-  low_ocr_confidence: "OCR thấp",
-  open: "Mở",
-  in_review: "Đang xử lý",
-  resolved: "Đã xử lý",
-  dismissed: "Bỏ qua",
-  low: "Thấp",
-  medium: "Trung bình",
-  high: "Cao",
-  critical: "Nghiêm trọng",
+  unmatched_approved_invoice: "Phiếu chưa trả",
+  unmatched_transaction: "Giao dịch chưa khớp",
+  unmatched_bank_transaction: "CK chưa khớp",
+  duplicate_invoice: "Trùng hóa đơn",
+  low_ocr_confidence: "Độ tin cậy thấp",
+  low_confidence_fallback_extraction: "Trích xuất yếu",
+  amount_mismatch_exception: "Lệch số tiền",
   inflow: "Tiền vào",
   outflow: "Tiền ra",
 };
@@ -78,7 +79,6 @@ const steps = [
     label: "Dữ liệu mẫu",
     short: "Sample",
     icon: FileText,
-    objective: "Tạo bộ file mẫu F&B để test nhanh toàn bộ quy trình.",
   },
   {
     id: "rules",
@@ -86,7 +86,6 @@ const steps = [
     label: "Cấu hình quy tắc",
     short: "Quy tắc",
     icon: Settings2,
-    objective: "Thiết lập ngưỡng kiểm soát và dung sai cho nhà hàng.",
   },
   {
     id: "vendors",
@@ -94,7 +93,6 @@ const steps = [
     label: "Danh mục mối buôn",
     short: "Mối buôn",
     icon: FileSpreadsheet,
-    objective: "Quản lý danh sách các mối buôn, nhà cung cấp thực phẩm.",
   },
   {
     id: "invoice-source",
@@ -102,7 +100,6 @@ const steps = [
     label: "Phiếu nhập hàng",
     short: "Nhập hàng",
     icon: Upload,
-    objective: "Tải lên ảnh chụp phiếu giao hàng viết tay, biên nhận.",
   },
   {
     id: "prepayment",
@@ -110,7 +107,6 @@ const steps = [
     label: "Kiểm tra phiếu nhập",
     short: "Kiểm tra",
     icon: ClipboardCheck,
-    objective: "Kiểm tra lại dữ liệu hóa đơn, sửa lỗi OCR và duyệt.",
   },
   {
     id: "payment",
@@ -118,7 +114,6 @@ const steps = [
     label: "Bảng kê thanh toán",
     short: "Bảng kê",
     icon: Banknote,
-    objective: "Lập bảng kê các phiếu cần thanh toán cho mối buôn.",
   },
   {
     id: "bank",
@@ -126,7 +121,6 @@ const steps = [
     label: "Sao kê ngân hàng",
     short: "Sao kê",
     icon: FileSpreadsheet,
-    objective: "Tải lên sao kê tài khoản ngân hàng để đối soát.",
   },
   {
     id: "reconcile",
@@ -134,7 +128,6 @@ const steps = [
     label: "Đối soát thanh toán",
     short: "Đối soát",
     icon: AlertTriangle,
-    objective: "Tự động gộp và khớp tiền chuyển khoản với các phiếu nhập.",
   },
   {
     id: "dashboard",
@@ -142,80 +135,463 @@ const steps = [
     label: "Bảng điều khiển",
     short: "Báo cáo",
     icon: WandSparkles,
-    objective: "Xem báo cáo tổng quan về tình hình công nợ và thanh toán.",
   },
 ];
 
+const sampleCategoryGroups = [
+  { id: "all", label: "Tất cả", categories: [] },
+  { id: "master", label: "Vendor master", categories: ["vendor_master"] },
+  { id: "invoice-data", label: "Bảng kê phiếu", categories: ["invoice_register", "processed"] },
+  { id: "ocr-files", label: "Ảnh/PDF OCR", categories: ["invoice_image", "invoice_pdf"] },
+  { id: "xml", label: "XML HĐĐT", categories: ["einvoice_xml"] },
+  { id: "payment", label: "Thanh toán", categories: ["payment_batch"] },
+  { id: "bank", label: "Sao kê bank", categories: ["bank_statement"] },
+  { id: "expected", label: "Kết quả mẫu", categories: ["expected_results"] },
+];
+
+const sampleCategoryLabels = {
+  vendor_master: "Vendor master",
+  invoice_register: "Bảng kê phiếu",
+  invoice_image: "Ảnh OCR",
+  invoice_pdf: "PDF OCR",
+  einvoice_xml: "XML HĐĐT",
+  payment_batch: "Bảng kê thanh toán",
+  bank_statement: "Sao kê ngân hàng",
+  expected_results: "Kết quả mẫu",
+  processed: "Dữ liệu xử lý",
+  other: "Khác",
+};
+
 function formatMoney(value, currency = "VND") {
   if (value === null || value === undefined || value === "") return "-";
-  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(value))} ${currency}`;
+  try {
+    const num = Number(value);
+    if (isNaN(num)) return value;
+    if (currency === "VND") {
+      return num.toLocaleString("vi-VN") + " ₫";
+    }
+    return num.toLocaleString("en-US", { style: "currency", currency });
+  } catch (e) {
+    return value;
+  }
+}
+
+function formatQuantity(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const num = Number(value);
+  if (Number.isNaN(num)) return value;
+  return Number.isInteger(num) ? String(num) : num.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
 }
 
 function StatusPill({ value }) {
-  const key = String(value || "pending").toLowerCase();
-  return <span className={`pill ${key.replaceAll("_", "-")}`}>{statusLabels[key] || value || "Đang chờ"}</span>;
+  const label = statusLabels[value] || value || "-";
+  let classes = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ";
+
+  if (["matched", "valid", "completed", "resolved", "validated", "approved", "approved_for_payment", "paid", "reconciled"].includes(value)) {
+    classes += "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200/40 dark:border-emerald-800/30";
+  } else if (["needs_review", "partially_matched", "in_review", "open", "warning", "medium", "unmatched_invoice", "unmatched_approved_invoice"].includes(value)) {
+    classes += "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-200/40 dark:border-amber-800/30";
+  } else if (["failed", "invalid", "rejected", "critical", "high", "amount_mismatch", "unmatched_transaction", "unmatched_bank_transaction"].includes(value)) {
+    classes += "bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200/40 dark:border-rose-800/30";
+  } else {
+    classes += "bg-slate-50 text-slate-600 dark:bg-zinc-800/50 dark:text-zinc-400 border border-slate-200/40 dark:border-zinc-700/30";
+  }
+
+  return <span className={classes}>{label}</span>;
 }
 
-function Metric({ icon: Icon, label, value, tone }) {
+function Metric({ icon: Icon, label, value, tone = "default" }) {
+  let toneClasses = "premium-card p-4 flex items-center gap-3.5 ";
+  let iconClasses = "p-2.5 rounded-lg ";
+
+  if (tone === "good") {
+    toneClasses += "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-100/70 dark:border-emerald-900/20";
+    iconClasses += "bg-emerald-100/70 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400";
+  } else if (tone === "warn") {
+    toneClasses += "bg-amber-50/20 dark:bg-amber-950/10 border-amber-100/70 dark:border-amber-900/20";
+    iconClasses += "bg-amber-100/70 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400";
+  } else if (tone === "danger") {
+    toneClasses += "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/70 dark:border-rose-900/20";
+    iconClasses += "bg-rose-100/70 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400";
+  } else {
+    toneClasses += "bg-white dark:bg-zinc-900 border-slate-100 dark:border-zinc-800/60";
+    iconClasses += "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400";
+  }
+
   return (
-    <section className={`metric ${tone || ""}`}>
-      <Icon size={18} aria-hidden="true" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </section>
+    <div className={toneClasses}>
+      <div className={iconClasses}>
+        <Icon size={18} />
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
+        <h4 className="text-base font-extrabold text-slate-800 dark:text-zinc-100 mt-0.5">{value}</h4>
+      </div>
+    </div>
   );
 }
 
-function DataTable({ columns, rows, empty = "Chưa có dữ liệu" }) {
+function DataTable({ columns, rows, empty = "Chưa có dữ liệu", pageSize = 12 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [rows.length]);
+
+  const totalPages = Math.ceil(rows.length / pageSize) || 1;
+
+  const paginatedRows = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return rows.slice(startIndex, startIndex + pageSize);
+  }, [rows, currentPage, pageSize]);
+
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column.key}>{column.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
+    <div className="table-container fade-in">
+      <div className="table-wrap border border-slate-100 dark:border-zinc-800/80 rounded-xl overflow-x-auto shadow-xs">
+        <table className="modern-table">
+          <thead>
             <tr>
-              <td className="empty-row" colSpan={columns.length}>
-                {empty}
-              </td>
+              {columns.map((column) => (
+                <th key={column.key}>{column.label}</th>
+              ))}
             </tr>
-          ) : (
-            rows.map((row, index) => (
-              <tr key={row.id || `${row.invoice_id || row.transaction_id || row.payment_id || "row"}-${index}`}>
-                {columns.map((column) => (
-                  <td key={column.key}>{column.render ? column.render(row) : row[column.key] || "-"}</td>
-                ))}
+          </thead>
+          <tbody>
+            {paginatedRows.length === 0 ? (
+              <tr>
+                <td className="empty-row" colSpan={columns.length}>
+                  {empty}
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              paginatedRows.map((row, index) => (
+                <tr key={row.id || `${row.invoice_id || row.transaction_id || row.payment_id || "row"}-${index}`}>
+                  {columns.map((column) => (
+                    <td key={column.key}>
+                      {column.render ? column.render(row) : row[column.key] !== null && row[column.key] !== undefined ? String(row[column.key]) : "-"}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > pageSize && (
+        <div className="pagination mt-2 flex justify-between items-center">
+          <button
+            type="button"
+            className="pag-btn text-xs px-3 py-1.5"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            Trước
+          </button>
+          <span className="pag-info text-xs">
+            Trang <strong>{currentPage}</strong> / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="pag-btn text-xs px-3 py-1.5"
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            Sau
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 function Field({ label, name, value, onChange, type = "text" }) {
   return (
-    <label className="field">
-      <span>{label}</span>
-      <input type={type} name={name} value={value ?? ""} onChange={onChange} />
-    </label>
+    <div className="flex flex-col gap-1 w-full">
+      <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">{label}</span>
+      <input
+        className="input-field py-2 text-xs"
+        type={type}
+        name={name}
+        value={value ?? ""}
+        onChange={onChange}
+      />
+    </div>
   );
 }
 
-function UploadCard({ icon: Icon, title, helper, inputRef, accept, multiple, onSubmit, primary }) {
+function UploadCard({ icon: Icon, title, helper, inputRef, accept, multiple, onSubmit, primary, selectedFiles, onSelectFiles, busy }) {
+  const [localFiles, setLocalFiles] = useState(null);
+  const filesToPreview = selectedFiles !== undefined ? selectedFiles : localFiles;
+  const [previews, setPreviews] = useState([]);
+
+  useEffect(() => {
+    if (filesToPreview && filesToPreview.length > 0) {
+      const newPreviews = Array.from(filesToPreview).map((file) => {
+        if (file.type.startsWith("image/")) {
+          return { name: file.name, url: URL.createObjectURL(file), type: "image" };
+        }
+        return { name: file.name, type: "other" };
+      });
+      setPreviews(newPreviews);
+      return () => newPreviews.forEach((p) => p.url && URL.revokeObjectURL(p.url));
+    } else {
+      setPreviews([]);
+    }
+  }, [filesToPreview]);
+
+  const handleFileChange = (e) => {
+    if (onSelectFiles) {
+      onSelectFiles(e.target.files);
+    } else {
+      setLocalFiles(e.target.files);
+    }
+  };
+
   return (
-    <div className={`upload-box ${primary ? "primary-source" : ""}`}>
-      <Icon size={24} />
-      <strong>{title}</strong>
-      <p>{helper}</p>
-      <input ref={inputRef} type="file" accept={accept} multiple={multiple} />
-      <button onClick={onSubmit}>Tải lên</button>
+    <div className={`premium-card p-4 flex flex-col items-center text-center gap-2.5 transition-all duration-300 relative overflow-hidden group ${primary ? "border-emerald-500/20 bg-emerald-500/[0.01] dark:bg-emerald-500/[0.005]" : ""}`}>
+      <div className={`p-2.5 rounded-full ${primary ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"} group-hover:scale-105 transition-transform duration-300`}>
+        <Icon size={20} />
+      </div>
+      <div>
+        <h4 className="font-bold text-slate-800 dark:text-zinc-100 text-xs">{title}</h4>
+        <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5 max-w-[200px] leading-relaxed">{helper}</p>
+      </div>
+
+      {previews.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-1.5 mt-1 w-full max-h-[90px] overflow-y-auto p-1 border border-dashed border-slate-100 dark:border-zinc-800 rounded-lg bg-slate-50/50 dark:bg-zinc-900/30">
+          {previews.map((p, i) => (
+            <div key={i} className="flex flex-col items-center p-1 bg-white dark:bg-zinc-800/80 border border-slate-100 dark:border-zinc-700/50 rounded-md w-[60px] shrink-0">
+              {p.type === "image" ? (
+                <img src={p.url} alt={p.name} className="w-8 h-8 object-cover rounded-sm border border-slate-100 dark:border-zinc-700" />
+              ) : (
+                <span className="text-lg h-8 flex items-center justify-center">📄</span>
+              )}
+              <span className="text-[8px] text-slate-400 dark:text-zinc-500 truncate w-full mt-0.5 px-0.5 text-center" title={p.name}>{p.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="w-full mt-1 flex flex-col gap-1.5">
+        <label className="btn-secondary w-full py-1 cursor-pointer text-[11px] flex items-center justify-center gap-1">
+          <span>Chọn tệp</span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={accept}
+            multiple={multiple}
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </label>
+        {filesToPreview && filesToPreview.length > 0 && (
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={busy}
+            className="btn-primary w-full py-1 text-[11px] flex items-center justify-center gap-1 shadow-sm"
+          >
+            {busy ? <Loader2 className="animate-spin" size={12} /> : <Upload size={12} />}
+            <span>Tải lên ({filesToPreview.length})</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QuickEditModal({ invoice, isOpen, onClose, onSave, busy }) {
+  const [totalAmount, setTotalAmount] = useState("");
+  const [vendorName, setVendorName] = useState("");
+  const [vendorAddress, setVendorAddress] = useState("");
+  const [vendorPhone, setVendorPhone] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
+  const [buyerName, setBuyerName] = useState("");
+
+  useEffect(() => {
+    if (invoice) {
+      setTotalAmount(invoice.total_amount || "");
+      setVendorName(invoice.vendor_name || "");
+      setVendorAddress(invoice.vendor_address || "");
+      setVendorPhone(invoice.vendor_phone || "");
+      setInvoiceDate(invoice.invoice_date || "");
+      setBuyerName(invoice.buyer_name || "");
+    }
+  }, [invoice]);
+
+  if (!isOpen || !invoice) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm fade-in">
+      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-5 w-full max-w-4xl shadow-xl slide-up flex flex-col max-h-[90vh]">
+        <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 dark:border-zinc-800/80">
+          <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Chi tiết phiếu nhập hàng (OCR)
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-sm">✕</button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 py-4 overflow-y-auto min-h-0 flex-1">
+          {/* LEFT COLUMN: METADATA & EDIT FIELDS (col-span-5) */}
+          <div className="md:col-span-5 flex flex-col gap-3.5 pr-2 border-r border-slate-100 dark:border-zinc-800/80">
+            <h4 className="text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase tracking-widest pb-1 border-b border-slate-100 dark:border-zinc-850">
+              Thông tin chung
+            </h4>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Mã Phiếu</span>
+                <input className="input-field opacity-60 bg-slate-50 dark:bg-zinc-800/60 py-1 text-xs" value={invoice.invoice_number || ""} disabled />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Ngày Lập</span>
+                <input className="input-field py-1 text-xs" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Mối Buôn (Người bán)</span>
+              <input className="input-field py-1 text-xs" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Địa chỉ Mối Buôn</span>
+              <input className="input-field py-1 text-xs" value={vendorAddress} onChange={(e) => setVendorAddress(e.target.value)} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Số Điện Thoại</span>
+                <input className="input-field py-1 text-xs" value={vendorPhone} onChange={(e) => setVendorPhone(e.target.value)} />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Tổng tiền (VND)</span>
+                <input className="input-field py-1 text-xs" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Người mua (Khách hàng)</span>
+              <input className="input-field py-1 text-xs" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: DETAILED ITEMS TABLE (col-span-7) */}
+          <div className="md:col-span-7 flex flex-col gap-3.5">
+            <h4 className="text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase tracking-widest pb-1 border-b border-slate-100 dark:border-zinc-850">
+              Chi tiết mặt hàng ({invoice.items?.length || 0})
+            </h4>
+
+            {invoice.items && invoice.items.length > 0 ? (
+              <div className="border border-slate-100 dark:border-zinc-800 rounded-xl overflow-hidden shadow-xs flex-1 min-h-[200px] overflow-y-auto">
+                <table className="modern-table">
+                  <thead>
+                    <tr>
+                      <th className="py-1.5 text-[10px] w-12">STT</th>
+                      <th className="py-1.5 text-[10px]">Tên Hàng</th>
+                      <th className="py-1.5 text-[10px] text-right w-16">SL</th>
+                      <th className="py-1.5 text-[10px] text-right w-24">Đơn Giá</th>
+                      <th className="py-1.5 text-[10px] text-right w-24">Thành Tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoice.items.map((item, index) => (
+                      <tr key={item.id || index}>
+                        <td className="py-1.5 text-center text-xs">{index + 1}</td>
+                        <td className="py-1.5 text-xs text-slate-700 dark:text-zinc-300 font-medium">{item.description}</td>
+                        <td className="py-1.5 text-right text-xs">{formatQuantity(item.quantity)}</td>
+                        <td className="py-1.5 text-right text-xs font-mono">{formatMoney(item.unit_price, invoice.currency)}</td>
+                        <td className="py-1.5 text-right text-xs font-bold font-mono text-slate-800 dark:text-zinc-100">
+                          {formatMoney(item.amount || (item.quantity * item.unit_price), invoice.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-zinc-850 rounded-xl p-8 bg-slate-50/50 dark:bg-zinc-950/20">
+                <span className="text-xs text-slate-400 dark:text-zinc-500 font-medium">Không phát hiện hàng hóa chi tiết</span>
+                <span className="text-[10px] text-slate-400/80 dark:text-zinc-600 mt-1">Hóa đơn không định dạng bảng hoặc ảnh mờ</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3.5 border-t border-slate-100 dark:border-zinc-800/80">
+          <button onClick={onClose} disabled={busy} className="btn-secondary py-1 px-3 text-xs">Hủy</button>
+          <button
+            onClick={() => onSave(invoice.id, {
+              total_amount: totalAmount === "" ? null : Number(totalAmount),
+              vendor_name: vendorName,
+              vendor_address: vendorAddress,
+              vendor_phone: vendorPhone,
+              invoice_date: invoiceDate,
+              buyer_name: buyerName
+            })}
+            disabled={busy}
+            className="btn-primary py-1 px-3 text-xs flex items-center gap-1 shadow-sm"
+          >
+            {busy && <Loader2 className="animate-spin" size={12} />}
+            Lưu thay đổi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SamplePreviewModal({ preview, isOpen, onClose, renderContent }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsFullscreen(false);
+    }
+  }, [isOpen]);
+
+  if (!isOpen || !preview) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm fade-in">
+      <div className={`bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl flex flex-col transition-all duration-300 slide-up ${
+        isFullscreen ? "w-[95vw] h-[90vh] max-w-7xl" : "w-full max-w-3xl h-[65vh]"
+      }`}>
+        <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-zinc-800/80">
+          <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-100 truncate pr-4">
+            Xem nhanh: {preview.file_name}
+          </h3>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500 dark:text-zinc-400 rounded-lg transition-colors"
+              title={isFullscreen ? "Thu nhỏ" : "Phóng to"}
+            >
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg transition-colors font-bold text-xs"
+              title="Đóng"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4 bg-slate-50/50 dark:bg-zinc-950/20">
+          {renderContent(isFullscreen)}
+        </div>
+        <div className="p-3 border-t border-slate-100 dark:border-zinc-800/80 flex justify-end">
+          <button type="button" onClick={onClose} className="btn-secondary py-1.5 px-4 text-xs">
+            Đóng
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -237,19 +613,17 @@ export default function App() {
   const [reportText, setReportText] = useState("");
   const [sampleSummary, setSampleSummary] = useState(null);
   const [sampleFiles, setSampleFiles] = useState([]);
+  const [samplePreview, setSamplePreview] = useState(null);
   const [clearGeneratedBeforeRun, setClearGeneratedBeforeRun] = useState(true);
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem("finrecon_token") || "");
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("finrecon_user") || "null");
-    } catch {
-      return null;
-    }
-  });
-  const [loginForm, setLoginForm] = useState({ email: "admin@finrecon.local", password: "demo123" });
+  const [sampleCategoryFilter, setSampleCategoryFilter] = useState("all");
+  const [sampleFormatFilter, setSampleFormatFilter] = useState("all");
   const [exceptionDrafts, setExceptionDrafts] = useState({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [fallbackFiles, setFallbackFiles] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+  const [editingInvoice, setEditingInvoice] = useState(null);
 
   const vendorFileRef = useRef(null);
   const invoiceRegisterRef = useRef(null);
@@ -270,131 +644,213 @@ export default function App() {
     [invoices],
   );
 
+  const flattenedInvoices = useMemo(() => {
+    const list = [];
+    invoices.forEach((inv) => {
+      const items = inv.items || [];
+      if (items.length === 0) {
+        list.push({
+          ...inv,
+          _isFirst: true,
+          _rowSpan: 1,
+          _itemIndex: "-",
+          _itemDescription: "-",
+          _itemQuantity: "-",
+          _itemUnitPrice: "-",
+          _itemAmount: "-",
+        });
+      } else {
+        items.forEach((item, index) => {
+          list.push({
+            ...inv,
+            _isFirst: index === 0,
+            _rowSpan: items.length,
+            _itemIndex: index + 1,
+            _itemDescription: item.description || "-",
+            _itemQuantity: item.quantity !== null && item.quantity !== undefined ? item.quantity : "-",
+            _itemUnitPrice: item.unit_price !== null && item.unit_price !== undefined ? item.unit_price : "-",
+            _itemAmount: item.amount !== null && item.amount !== undefined ? item.amount : (item.quantity * item.unit_price) || "-",
+          });
+        });
+      }
+    });
+    return list;
+  }, [invoices]);
+
+  const sampleFormats = useMemo(() => {
+    const formats = new Set();
+    sampleFiles.forEach((file) => {
+      const suffix = file.file_name?.split(".").pop()?.toLowerCase();
+      if (suffix) formats.add(suffix);
+    });
+    return Array.from(formats).sort();
+  }, [sampleFiles]);
+
+  const sampleCategoryCounts = useMemo(() => {
+    const counts = { all: sampleFiles.length };
+    sampleCategoryGroups.forEach((group) => {
+      if (group.id === "all") return;
+      counts[group.id] = sampleFiles.filter((file) => group.categories.includes(file.file_category)).length;
+    });
+    return counts;
+  }, [sampleFiles]);
+
+  const filteredSampleFiles = useMemo(() => {
+    const activeGroup = sampleCategoryGroups.find((group) => group.id === sampleCategoryFilter);
+    return sampleFiles.filter((file) => {
+      const categoryMatch = !activeGroup || activeGroup.id === "all" || activeGroup.categories.includes(file.file_category);
+      const suffix = file.file_name?.split(".").pop()?.toLowerCase();
+      const formatMatch = sampleFormatFilter === "all" || suffix === sampleFormatFilter;
+      return categoryMatch && formatMatch;
+    });
+  }, [sampleFiles, sampleCategoryFilter, sampleFormatFilter]);
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
   async function request(path, options = {}) {
     const headers = {
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(options.headers || {}),
     };
-    let response;
-    try {
-      response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    } catch (error) {
-      throw new Error(`Không kết nối được backend tại ${API_BASE}. Hãy chạy backend bằng npm run dev trong thư mục backend.`);
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Yêu cầu thất bại");
     }
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error || `Request failed: ${response.status}`);
-    }
-    return response.json();
+    return res.json();
   }
 
-  async function refresh() {
-    const [
-      nextOverview,
-      nextVendors,
-      nextInvoices,
-      nextTransactions,
-      nextPayments,
-      nextMatches,
-      nextExceptions,
-      nextBatches,
-      nextJobs,
-      nextRules,
-      nextAuditLogs,
-      nextReports,
-      nextSampleFiles,
-    ] = await Promise.all([
-      request("/api/dashboard/summary"),
-      request("/api/vendors"),
-      request("/api/invoices"),
-      request("/api/bank-transactions"),
-      request("/api/payment-batches"),
-      request("/api/reconciliation/results"),
-      request("/api/exceptions"),
-      request("/api/batches"),
-      request("/api/jobs"),
-      request("/api/rules"),
-      request("/api/audit-logs"),
-      request("/api/reports"),
-      request("/api/sample-data/files"),
-    ]);
-    setOverview(nextOverview);
-    setVendors(nextVendors);
-    setInvoices(nextInvoices);
-    setTransactions(nextTransactions);
-    setPaymentBatches(nextPayments);
-    setMatches(nextMatches);
-    setExceptions(nextExceptions);
-    setBatches(nextBatches);
-    setJobs(nextJobs);
-    setRules({ ...defaultRules, ...nextRules });
-    setAuditLogs(nextAuditLogs);
-    setReports(nextReports);
-    setSampleFiles(nextSampleFiles);
+  async function loadData() {
+    try {
+      const [over, vnds, invs, txs, pb, mtchs, excps, bts, jbs, rls, logs, rpts] = await Promise.all([
+        request("/api/dashboard/summary"),
+        request("/api/vendors"),
+        request("/api/invoices"),
+        request("/api/bank-transactions"),
+        request("/api/payment-batches"),
+        request("/api/reconciliation/results"),
+        request("/api/exceptions"),
+        request("/api/batches"),
+        request("/api/jobs"),
+        request("/api/rules"),
+        request("/api/audit-logs"),
+        request("/api/reports"),
+      ]);
+      setOverview(over);
+      setVendors(vnds);
+      setInvoices(invs);
+      setTransactions(txs);
+      setPaymentBatches(pb);
+      setMatches(mtchs);
+      setExceptions(excps);
+      setBatches(bts);
+      setJobs(jbs);
+      setRules(rls);
+      setAuditLogs(logs);
+      setReports(rpts);
+      if (rpts.length > 0) {
+        setReportText(rpts[0].report_content || "");
+      }
+    } catch (e) {
+      setNotice(`Không thể load dữ liệu: ${e.message}`);
+    }
+  }
+
+  async function loadSampleFiles() {
+    try {
+      const list = await request("/api/sample-data/files");
+      setSampleFiles(list);
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   useEffect(() => {
-    refresh().catch((error) => setNotice(error.message));
+    loadData();
+    loadSampleFiles();
+    const timer = setInterval(() => {
+      loadData();
+      loadSampleFiles();
+    }, 60000);
+    return () => clearInterval(timer);
   }, []);
 
-  async function withBusy(action, successMessage) {
+  async function withBusy(action, successMessage = "") {
     setBusy(true);
     setNotice("");
     try {
-      const result = await action();
-      await refresh();
-      setNotice(successMessage);
-      return result;
-    } catch (error) {
-      setNotice(error.message);
+      const res = await action();
+      await loadData();
+      await loadSampleFiles();
+      if (successMessage) {
+        setNotice(successMessage);
+        setTimeout(() => setNotice(""), 4000);
+      }
+      return res;
+    } catch (e) {
+      setNotice(`Lỗi: ${e.message}`);
       return null;
     } finally {
       setBusy(false);
     }
   }
 
-  async function login(event) {
-    event.preventDefault();
-    await withBusy(async () => {
-      const result = await request("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loginForm),
-      });
-      setAuthToken(result.access_token);
-      setCurrentUser(result.user);
-      localStorage.setItem("finrecon_token", result.access_token);
-      localStorage.setItem("finrecon_user", JSON.stringify(result.user));
-    }, "Đã đăng nhập");
-  }
-
-  function logout() {
-    setAuthToken("");
-    setCurrentUser(null);
-    localStorage.removeItem("finrecon_token");
-    localStorage.removeItem("finrecon_user");
+  async function refresh() {
+    await withBusy(() => loadData(), "Đã cập nhật dữ liệu mới nhất");
   }
 
   async function importFile(file, endpoint, label) {
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
-    await withBusy(() => request(endpoint, { method: "POST", body: form }), `Đã nhập ${label}`);
+    await withBusy(() => request(endpoint, { method: "POST", body: form }), `Đã import ${label} thành công`);
   }
-
 
   async function uploadFallback(files) {
     if (!files?.length) return;
-    const form = new FormData();
-    [...files].forEach((file) => form.append("files", file));
-    await withBusy(() => request("/api/batches/invoices/upload", { method: "POST", body: form }), "Đã upload fallback OCR");
+    setUploadProgress({ current: 0, total: files.length, currentFile: "Chuẩn bị...", success: 0, error: 0 });
+    let successCount = 0;
+    let errorCount = 0;
+    setBusy(true);
+    setNotice("");
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setUploadProgress({ current: i + 1, total: files.length, currentFile: file.name, success: successCount, error: errorCount });
+
+      const form = new FormData();
+      form.append("files", file);
+
+      try {
+        const res = await request("/api/batches/invoices/upload", { method: "POST", body: form });
+        if (res.errors && res.errors.length > 0) {
+          errorCount++;
+        } else {
+          successCount++;
+        }
+      } catch (err) {
+        errorCount++;
+      }
+    }
+
+    setUploadProgress(null);
+    setBusy(false);
+    await refresh();
+    setNotice(`Đã upload xong. Thành công: ${successCount}, Lỗi: ${errorCount}`);
   }
 
   async function uploadAttachment(file) {
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
-    await withBusy(() => request("/api/invoices/upload-attachment", { method: "POST", body: form }), "Đã upload attachment");
+    form.append("use_fallback_extraction", "true");
+    await withBusy(() => request("/api/invoices/upload-attachment", { method: "POST", body: form }), "Đã tải lên tệp đính kèm thành công");
   }
 
   async function runValidation() {
@@ -473,6 +929,15 @@ export default function App() {
     if (result) setSampleSummary({ cleared: true, ...result });
   }
 
+  async function clearData(endpoint, label) {
+    if (window.confirm(`Bạn có chắc chắn muốn xóa toàn bộ dữ liệu ${label} không?`)) {
+      await withBusy(
+        () => request(endpoint, { method: "DELETE" }),
+        `Đã xóa toàn bộ ${label}`
+      );
+    }
+  }
+
   async function generateSamples() {
     const result = await withBusy(
       () => request(`/api/sample-data/generate?clear_existing=${clearGeneratedBeforeRun}`, { method: "POST" }),
@@ -481,23 +946,50 @@ export default function App() {
     if (result) setSampleSummary(result);
   }
 
-  async function quickEditInvoice(invoice) {
-    const newAmount = window.prompt("Nhập tổng tiền mới (VND):", invoice.total_amount || "");
-    const newVendor = window.prompt("Nhập tên mối buôn mới:", invoice.vendor_name || "");
-    
-    if (newAmount !== null && newVendor !== null) {
-      await withBusy(() => request(`/api/invoices/${invoice.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...invoice,
-          total_amount: Number(newAmount),
-          vendor_name: newVendor,
-          status: "needs_review",
-          validation_status: "pending"
-        })
-      }), "Đã sửa nhanh phiếu nhập");
+  async function openSamplePreview(file) {
+    const preview = await withBusy(
+      () => request(`/api/sample-data/files/${file.id}/preview`),
+      `Đang xem ${file.file_name}`,
+    );
+    if (preview) setSamplePreview(preview);
+  }
+
+  function quickEditInvoice(invoice) {
+    setEditingInvoice(invoice);
+  }
+
+  function renderSamplePreview(isFullscreen = false) {
+    if (!samplePreview) return null;
+    const suffix = samplePreview.file_name.split(".").pop()?.toLowerCase();
+    const previewUrl = `${API_BASE}${samplePreview.content_url || samplePreview.download_url}`;
+    if (["png", "jpg", "jpeg", "gif", "webp"].includes(suffix)) {
+      return (
+        <div className="p-2.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-100 dark:border-zinc-800 flex justify-center">
+          <img className="max-w-full h-auto rounded-lg shadow-xs border border-slate-200/50 dark:border-zinc-700/50" src={previewUrl} alt={samplePreview.file_name} />
+        </div>
+      );
     }
+    if (suffix === "pdf") {
+      return <iframe className={`w-full ${isFullscreen ? "h-[72vh]" : "h-[45vh]"} rounded-xl border border-slate-200 dark:border-zinc-850`} src={previewUrl} title={samplePreview.file_name} />;
+    }
+    if (suffix === "csv" && samplePreview.rows?.length) {
+      const columns = samplePreview.columns || Object.keys(samplePreview.rows[0] || {});
+      return (
+        <div className="table-wrap border border-slate-100 dark:border-zinc-800/80 rounded-xl overflow-hidden shadow-xs">
+          <table className="modern-table">
+            <thead>
+              <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+            </thead>
+            <tbody>
+              {samplePreview.rows.map((row, index) => (
+                <tr key={index}>{columns.map((column) => <td key={column}>{row[column] || ""}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    return <pre className={`p-3 bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800 text-[11px] font-mono rounded-xl overflow-auto text-slate-700 dark:text-zinc-300 ${isFullscreen ? "max-h-[72vh]" : "max-h-[320px]"}`}>{samplePreview.text || "Không có preview."}</pre>;
   }
 
   function nextStep() {
@@ -508,481 +1000,850 @@ export default function App() {
     setActiveStep(steps[Math.max(activeIndex - 1, 0)].id);
   }
 
-  function renderTopAuth() {
-    return currentUser ? (
-      <div className="user-box">
-        <span>{currentUser.email}</span>
-        <strong>{currentUser.role}</strong>
-        <button onClick={logout}>Đăng xuất</button>
-      </div>
-    ) : (
-      <form className="login-box" onSubmit={login}>
-        <input value={loginForm.email} onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })} />
-        <input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} />
-        <button type="submit">Đăng nhập</button>
-      </form>
-    );
-  }
-
   return (
-    <main className="app-shell workflow-shell">
-      <aside className="sidebar workflow-sidebar">
-        <div className="brand">
-          <Banknote size={24} />
-          <div>
-            <strong>FinRecon AI</strong>
-            <span>Invoice Control & Payment Reconciliation</span>
+    <main className="min-h-screen flex bg-slate-50 dark:bg-zinc-950 transition-colors duration-300">
+
+      {/* LEFT SIDEBAR NAVIGATION */}
+      <aside className="w-64 bg-slate-900 dark:bg-zinc-900 text-slate-100 flex flex-col shrink-0 border-r border-slate-800/40 sticky top-0 h-screen z-10">
+
+        {/* BRAND LOGO */}
+        <div className="p-5 border-b border-slate-800/60 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20 shadow-sm">
+              <Banknote size={18} className="animate-pulse" />
+            </div>
+            <div>
+              <strong className="text-sm font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">FinRecon AI</strong>
+              <span className="block text-[9px] text-slate-550 dark:text-zinc-400 font-bold tracking-wider uppercase">Automated Audits</span>
+            </div>
           </div>
+          <button
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            className="p-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 dark:text-zinc-300 rounded-lg transition-all duration-200 border border-slate-700/30"
+            title="Đổi giao diện"
+          >
+            {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
+          </button>
         </div>
-        <nav className="step-nav">
-          {steps.map(({ id, number, label, short, icon: Icon }) => (
-            <button key={id} className={activeStep === id ? "active" : ""} onClick={() => setActiveStep(id)}>
-              <span className="step-number">{number}</span>
-              <Icon size={16} />
-              <span>
-                <strong>{label}</strong>
-                <em>{short}</em>
-              </span>
-            </button>
-          ))}
+
+        {/* NAVIGATION LIST */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1 scrollbar-thin">
+          {steps.map(({ id, number, label, short, icon: Icon }) => {
+            const isActive = activeStep === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveStep(id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-left border relative group ${
+                  isActive
+                    ? "bg-emerald-600/10 dark:bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold"
+                    : "bg-transparent text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-800/40"
+                }`}
+              >
+                <div className={`w-5.5 h-5.5 rounded-full flex items-center justify-center text-[9px] font-bold border transition-colors ${
+                  isActive
+                    ? "bg-emerald-500 text-slate-900 border-emerald-400"
+                    : "bg-slate-800/80 text-slate-400 border-slate-700 group-hover:border-slate-500 group-hover:text-slate-200"
+                }`}>
+                  {number}
+                </div>
+                <Icon size={14} className={isActive ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300"} />
+                <div className="min-w-0">
+                  <p className="text-[11px] leading-none font-bold text-slate-100">{label}</p>
+                </div>
+                {isActive && (
+                  <div className="absolute right-2.5 w-1 h-1 bg-emerald-400 rounded-full shadow-lg shadow-emerald-400/50" />
+                )}
+              </button>
+            );
+          })}
         </nav>
+
+        {/* SIDEBAR FOOTER */}
+        <div className="p-3 border-t border-slate-800/60 bg-slate-950/20 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-800/40 dark:bg-zinc-800/40 border border-slate-800 dark:border-zinc-800 rounded-lg">
+            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+            <span className="text-[10px] font-semibold text-slate-300">Hoạt động bình thường</span>
+          </div>
+          {activeStep !== "sample-data" && (
+            <button
+              onClick={() => refresh()}
+              disabled={busy}
+              className="w-full btn-secondary py-1.5 text-[11px] flex items-center justify-center gap-1 shadow-sm"
+            >
+              {busy ? <Loader2 className="animate-spin" size={11} /> : <RefreshCw size={11} />}
+              Làm mới dữ liệu
+            </button>
+          )}
+        </div>
       </aside>
 
-      <section className="workspace">
-        <header className="topbar workflow-topbar">
+      {/* MAIN WORKSPACE PANEL */}
+      <section className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto relative">
+
+        {/* WORKSPACE HEADER */}
+        <header className="p-4 border-b border-slate-200/50 dark:border-zinc-800/60 flex justify-between items-center gap-4 bg-white/60 dark:bg-zinc-900/40 backdrop-blur-md sticky top-0 z-10">
           <div>
-            <p>Bước {active.number} trong {steps.length}</p>
-            <h1>{active.label}</h1>
-            <span>{active.objective}</span>
+            <div className="flex items-center gap-2.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+              <span>Bước {active.number} của {steps.length}</span>
+              <ChevronRight size={10} />
+              <span>{active.short}</span>
+            </div>
+            <h1 className="text-lg font-extrabold text-slate-800 dark:text-zinc-100 mt-0.5">{active.label}</h1>
           </div>
-          <div className="top-actions">
-            {renderTopAuth()}
-            <button className="icon-button" onClick={() => refresh()} disabled={busy} title="Làm mới dữ liệu">
-              <RefreshCw size={18} />
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => refresh()}
+              disabled={busy}
+              className="p-2 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 rounded-xl transition-all duration-200 border border-slate-200 dark:border-zinc-700/60 shadow-xs"
+              title="Làm mới"
+            >
+              <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
             </button>
           </div>
         </header>
 
-        <div className="workflow-progress">
-          {steps.map((step, index) => (
-            <button
-              key={step.id}
-              className={`${index < activeIndex ? "done" : ""} ${index === activeIndex ? "current" : ""}`}
-              onClick={() => setActiveStep(step.id)}
-            >
-              {step.number}
-            </button>
-          ))}
-        </div>
+        {/* WORKSPACE BODY */}
+        <div className="flex-1 p-5 space-y-5">
 
-        {notice && <div className="notice">{notice}</div>}
+          {/* FLOATING NOTICE BOX */}
+          {notice && (
+            <div className="fade-in bg-slate-900 dark:bg-zinc-900 text-slate-100 border border-slate-800 dark:border-zinc-800 p-3 rounded-xl shadow-lg flex items-center justify-between gap-3 max-w-md mx-auto fixed bottom-5 right-5 z-50">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <p className="text-[11px] font-semibold leading-none">{notice}</p>
+              </div>
+              <button onClick={() => setNotice("")} className="text-slate-400 hover:text-slate-200 text-xs">✕</button>
+            </div>
+          )}
 
-        {activeStep === "sample-data" && (
-          <section className="step-layout">
-            <section className="panel">
-              <div className="section-head">
-                <div>
-                  <h2>Tạo dữ liệu mẫu</h2>
-                  <p className="helper-text">Sinh bộ file mẫu cho nhà hàng nhỏ: mối buôn, phiếu nhập hàng theo mẫu hóa đơn bán hàng, XML hóa đơn điện tử, bảng kê thanh toán và sao kê ngân hàng.</p>
+          {/* STEP 1: SAMPLE DATA WORKFLOW */}
+          {activeStep === "sample-data" && (
+            <div className="space-y-5 slide-up">
+              <div className="premium-card p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Kho dữ liệu mẫu F&B</h2>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <button onClick={generateSamples} disabled={busy} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1 shadow-sm">
+                      {busy ? <Loader2 className="animate-spin" size={12} /> : <Database size={12} />}
+                      Tạo sample
+                    </button>
+                    <button onClick={clearGeneratedSamples} disabled={busy} className="btn-secondary py-1.5 px-3 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                      <Trash2 size={12} />
+                      Xóa sample
+                    </button>
+                    {sampleFiles.length > 0 && (
+                      <a className="btn-secondary py-1.5 px-3 text-xs" href={`${API_BASE}/api/sample-data/files/download.zip`}>Tải ZIP</a>
+                    )}
+                  </div>
                 </div>
-                <div className="row-actions">
-                  <button onClick={generateSamples} disabled={busy}>Generate sample</button>
-                  <button onClick={clearGeneratedSamples} disabled={busy}>Xóa sample trong DB</button>
-                  <a className={`button-link ${sampleFiles.length ? "" : "disabled"}`} href={`${API_BASE}/api/sample-data/files/download.zip`}>Tải tất cả ZIP</a>
+
+                <label className="flex items-center gap-2 p-2 bg-slate-50 dark:bg-zinc-900/40 border border-slate-100 dark:border-zinc-800 rounded-lg cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-200 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500/20 w-3.5 h-3.5"
+                    checked={clearGeneratedBeforeRun}
+                    onChange={(event) => setClearGeneratedBeforeRun(event.target.checked)}
+                  />
+                  <span className="text-[11px] text-slate-600 dark:text-zinc-300 font-semibold">Tự động xóa sạch dữ liệu mẫu cũ trước khi sinh mới</span>
+                </label>
+
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                  <Metric icon={FileSpreadsheet} label="Mối buôn" value={sampleSummary?.vendors ?? "-"} />
+                  <Metric icon={FileText} label="Phiếu nhập" value={sampleSummary?.invoices ?? "-"} />
+                  <Metric icon={FileText} label="XML HĐĐT" value={(sampleSummary?.einvoice_xml_files ?? sampleFiles.filter((file) => file.file_category === "einvoice_xml").length) || "-"} />
+                  <Metric icon={Upload} label="Ảnh & PDF" value={((sampleSummary?.image_files ?? sampleFiles.filter((file) => file.file_category === "invoice_image").length) + (sampleSummary?.pdf_files ?? sampleFiles.filter((file) => file.file_category === "invoice_pdf").length)) || "-"} />
+                  <Metric icon={ClipboardCheck} label="Bảng kê" value={sampleSummary?.payments ?? "-"} />
+                  <Metric icon={Banknote} label="Sao kê" value={sampleSummary?.transactions ?? "-"} />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {sampleCategoryGroups.map((group) => {
+                        const activeGroup = sampleCategoryFilter === group.id;
+                        return (
+                          <button
+                            key={group.id}
+                            type="button"
+                            onClick={() => setSampleCategoryFilter(group.id)}
+                            className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-colors ${
+                              activeGroup
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/50"
+                                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800 dark:hover:bg-zinc-850"
+                            }`}
+                          >
+                            {group.label} <span className="font-mono opacity-70">{sampleCategoryCounts[group.id] || 0}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500">Format</span>
+                      <select
+                        className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-zinc-300"
+                        value={sampleFormatFilter}
+                        onChange={(event) => setSampleFormatFilter(event.target.value)}
+                      >
+                        <option value="all">Tất cả format</option>
+                        {sampleFormats.map((format) => (
+                          <option key={format} value={format}>{format.toUpperCase()}</option>
+                        ))}
+                      </select>
+                      <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+                        Đang hiển thị {filteredSampleFiles.length}/{sampleFiles.length} file
+                      </span>
+                    </div>
+                  </div>
+
+                  <DataTable
+                    rows={filteredSampleFiles}
+                    pageSize={8}
+                    empty="Không có file phù hợp với bộ lọc"
+                    columns={[
+                      { key: "file_name", label: "Tên file" },
+                      { key: "file_category", label: "Nhóm", render: (row) => sampleCategoryLabels[row.file_category] || row.file_category },
+                      { key: "media_type", label: "Format", render: (row) => row.file_name?.split(".").pop()?.toUpperCase() || row.media_type || "-" },
+                      { key: "file_size", label: "Dung lượng", render: (row) => `${Math.ceil((row.file_size || 0) / 1024)} KB` },
+                      {
+                        key: "actions",
+                        label: "Thao tác",
+                        render: (row) => (
+                          <div className="flex gap-1.5">
+                            <button onClick={() => openSamplePreview(row)} className="btn-secondary px-2 py-1 text-[10px] rounded-md flex items-center gap-1">
+                              <Eye size={10} />
+                              Xem
+                            </button>
+                            <a className="btn-secondary px-2 py-1 text-[10px] rounded-md" href={`${API_BASE}${row.download_url}`}>Tải</a>
+                          </div>
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
               </div>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={clearGeneratedBeforeRun}
-                  onChange={(event) => setClearGeneratedBeforeRun(event.target.checked)}
+            </div>
+          )}
+
+          {/* STEP 2: RULES CONFIGURATION */}
+          {activeStep === "rules" && (
+            <div className="space-y-5 slide-up">
+              <form className="premium-card p-5 space-y-5" onSubmit={saveRules}>
+                <div className="pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Thiết lập quy tắc đối soát</h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Field label="Ngưỡng tự động khớp (%)" name="auto_match_threshold" type="number" value={rules.auto_match_threshold} onChange={(e) => setRules({ ...rules, auto_match_threshold: Number(e.target.value) })} />
+                  <Field label="Ngưỡng cần review (%)" name="manual_review_threshold" type="number" value={rules.manual_review_threshold} onChange={(e) => setRules({ ...rules, manual_review_threshold: Number(e.target.value) })} />
+                  <Field label="Dung sai ngày thanh toán (ngày)" name="date_tolerance_days" type="number" value={rules.date_tolerance_days} onChange={(e) => setRules({ ...rules, date_tolerance_days: Number(e.target.value) })} />
+                  <Field label="Dung sai lệch tiền (VND)" name="amount_tolerance_vnd" type="number" value={rules.amount_tolerance_vnd} onChange={(e) => setRules({ ...rules, amount_tolerance_vnd: Number(e.target.value) })} />
+                  <Field label="Ngưỡng cảnh báo OCR (%)" name="low_ocr_confidence_threshold" type="number" value={rules.low_ocr_confidence_threshold} onChange={(e) => setRules({ ...rules, low_ocr_confidence_threshold: Number(e.target.value) })} />
+                  <Field label="Dung sai lệch thuế VAT (VND)" name="vat_tolerance" type="number" value={rules.vat_tolerance} onChange={(e) => setRules({ ...rules, vat_tolerance: Number(e.target.value) })} />
+                </div>
+
+                <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-zinc-800/80">
+                  <button type="submit" disabled={busy} className="btn-primary py-1.5 px-5 text-xs flex items-center gap-1 shadow-sm">
+                    {busy && <Loader2 className="animate-spin" size={12} />}
+                    Lưu quy tắc
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* STEP 3: VENDORS MASTER */}
+          {activeStep === "vendors" && (
+            <div className="space-y-5 slide-up">
+              <div className="premium-card p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Danh mục mối buôn ({vendors.length})</h2>
+                  </div>
+                  {vendors.length > 0 && (
+                    <button onClick={() => clearData("/api/vendors", "mối buôn")} disabled={busy} className="btn-secondary py-1 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                      <Trash2 size={12} />
+                      Xóa tất cả
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <UploadCard
+                    icon={FileSpreadsheet}
+                    title="Import mối buôn (Excel/CSV)"
+                    helper="Nguồn đối chiếu mã số thuế và tài khoản ngân hàng."
+                    inputRef={vendorFileRef}
+                    accept=".csv,.xlsx,.xls"
+                    onSubmit={() => importFile(vendorFileRef.current?.files?.[0], "/api/vendors/import", "vendor master")}
+                    primary
+                    busy={busy}
+                  />
+                </div>
+
+                <DataTable
+                  rows={vendors}
+                  pageSize={10}
+                  empty="Chưa có thông tin mối buôn nào"
+                  columns={[
+                    { key: "vendor_id", label: "Mã Mối" },
+                    { key: "vendor_name", label: "Tên mối buôn" },
+                    { key: "tax_code", label: "MST" },
+                    { key: "bank_name", label: "Ngân hàng" },
+                    { key: "bank_account", label: "Số tài khoản" },
+                    { key: "bank_account_holder", label: "Chủ tài khoản" },
+                    { key: "status", label: "Trạng thái", render: (row) => <StatusPill value={row.status} /> },
+                  ]}
                 />
-                <span>Xóa toàn bộ sample hiện tại trong database trước khi tạo mới</span>
-              </label>
-              <div className="metrics-grid compact">
-                <Metric icon={FileSpreadsheet} label="Mối buôn" value={sampleSummary?.vendors ?? "-"} />
-                <Metric icon={FileText} label="Phiếu nhập" value={sampleSummary?.invoices ?? "-"} />
-                <Metric icon={FileText} label="XML HĐĐT" value={(sampleSummary?.einvoice_xml_files ?? sampleFiles.filter((file) => file.file_category === "einvoice_xml").length) || "-"} />
-                <Metric icon={Upload} label="Ảnh/PDF phiếu" value={((sampleSummary?.image_files ?? sampleFiles.filter((file) => file.file_category === "invoice_image").length) + (sampleSummary?.pdf_files ?? sampleFiles.filter((file) => file.file_category === "invoice_pdf").length)) || "-"} />
-                <Metric icon={ClipboardCheck} label="Bảng kê" value={sampleSummary?.payments ?? "-"} />
-                <Metric icon={Banknote} label="Sao kê" value={sampleSummary?.transactions ?? "-"} />
               </div>
+            </div>
+          )}
+
+          {/* STEP 4: INVOICE UPLOAD & OCR */}
+          {activeStep === "invoice-source" && (
+            <div className="premium-card p-5 space-y-4 slide-up">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Tải lên phiếu nhập hàng / hóa đơn ({invoices.length})</h2>
+                </div>
+                {invoices.length > 0 && (
+                  <button onClick={() => clearData("/api/invoices", "hóa đơn")} disabled={busy} className="btn-secondary py-1 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                    <Trash2 size={12} />
+                    Xóa tất cả
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UploadCard
+                  icon={Upload}
+                  title="Ảnh chụp phiếu viết tay & PDF (OCR)"
+                  helper="Hệ thống quét OCR tự động để đọc số tiền, mã phiếu."
+                  inputRef={fallbackFilesRef}
+                  accept=".pdf,.png,.jpg,.jpeg,.txt,.xml"
+                  multiple
+                  selectedFiles={fallbackFiles}
+                  onSelectFiles={(files) => setFallbackFiles(files)}
+                  onSubmit={() => {
+                    uploadFallback(fallbackFiles || fallbackFilesRef.current?.files).then(() => {
+                      setFallbackFiles(null);
+                      if (fallbackFilesRef.current) fallbackFilesRef.current.value = "";
+                    });
+                  }}
+                  primary
+                  busy={busy}
+                />
+                <UploadCard
+                  icon={FileSpreadsheet}
+                  title="Bảng kê điện tử Excel/CSV"
+                  helper="Nhập trực tiếp danh sách hóa đơn từ tệp bảng kê."
+                  inputRef={invoiceRegisterRef}
+                  accept=".csv,.xlsx,.xls"
+                  onSubmit={() => importFile(invoiceRegisterRef.current?.files?.[0], "/api/invoices/import-register", "invoice register")}
+                  busy={busy}
+                />
+              </div>
+
               <DataTable
-                rows={sampleFiles}
-                empty="Chưa có sample trong database"
+                rows={flattenedInvoices}
+                pageSize={20}
+                empty="Chưa có hóa đơn nào được tải lên"
                 columns={[
-                  { key: "file_name", label: "Tên file" },
-                  { key: "file_category", label: "Loại" },
-                  { key: "file_size", label: "Dung lượng", render: (row) => `${Math.ceil((row.file_size || 0) / 1024)} KB` },
-                  { key: "relative_path", label: "Đường dẫn logic" },
                   {
-                    key: "download",
-                    label: "Tải về",
-                    render: (row) => <a className="button-link compact-link" href={`${API_BASE}${row.download_url}`}>Tải</a>,
+                    key: "invoice_number",
+                    label: "Mã Phiếu",
+                    render: (row) => row._isFirst ? <span className="font-bold text-slate-800 dark:text-zinc-100">{row.invoice_number}</span> : ""
+                  },
+                  {
+                    key: "invoice_date",
+                    label: "Ngày",
+                    render: (row) => row._isFirst ? (row.invoice_date || "-") : ""
+                  },
+                  {
+                    key: "vendor_name",
+                    label: "Nhà cung cấp",
+                    render: (row) => row._isFirst ? <span className="font-medium text-slate-700 dark:text-zinc-300">{row.vendor_name}</span> : ""
+                  },
+                  {
+                    key: "_itemIndex",
+                    label: "STT",
+                    render: (row) => <span className="text-slate-400 dark:text-zinc-500">{row._itemIndex}</span>
+                  },
+                  {
+                    key: "_itemDescription",
+                    label: "Tên hàng",
+                    render: (row) => <span className="font-medium text-slate-700 dark:text-zinc-300">{row._itemDescription}</span>
+                  },
+                  {
+                    key: "_itemQuantity",
+                    label: "SL",
+                    render: (row) => formatQuantity(row._itemQuantity)
+                  },
+                  {
+                    key: "_itemUnitPrice",
+                    label: "Đơn giá",
+                    render: (row) => typeof row._itemUnitPrice === "number" ? formatMoney(row._itemUnitPrice, row.currency) : row._itemUnitPrice
+                  },
+                  {
+                    key: "_itemAmount",
+                    label: "Thành tiền",
+                    render: (row) => typeof row._itemAmount === "number" ? formatMoney(row._itemAmount, row.currency) : row._itemAmount
+                  },
+                  {
+                    key: "total_amount",
+                    label: "Tổng tiền",
+                    render: (row) => row._isFirst ? <span className="font-bold text-slate-800 dark:text-zinc-100">{formatMoney(row.total_amount, row.currency)}</span> : ""
+                  },
+                  {
+                    key: "status",
+                    label: "Trạng thái",
+                    render: (row) => row._isFirst ? <StatusPill value={row.status} /> : ""
+                  },
+                  {
+                    key: "actions",
+                    label: "Hành động",
+                    render: (row) => {
+                      if (!row._isFirst) return "";
+                      return (
+                        <button onClick={() => quickEditInvoice(row)} disabled={busy} className="btn-secondary py-0.5 px-2 text-[10px] rounded-md">
+                          Sửa nhanh
+                        </button>
+                      );
+                    }
                   },
                 ]}
               />
-            </section>
-            <section className="side-panel">
-              <h2>Format hóa đơn</h2>
-              <p>Ảnh/PDF sample mới dùng mẫu hóa đơn bán hàng dạng giấy: tiêu đề cửa hàng, bảng 10 dòng hàng, cột số lượng, đơn giá, thành tiền và phần ký khách hàng/người bán.</p>
-              <p>Sau khi generate, file được lưu trong database chung của backend. Nút xóa chỉ xóa sample generated, không xóa dữ liệu nghiệp vụ đã import.</p>
-            </section>
-          </section>
-        )}
+            </div>
+          )}
 
-        {activeStep === "rules" && (
-          <section className="step-layout">
-            <form className="panel form-grid" onSubmit={saveRules}>
-              <h2>1. Cấu hình rule trước khi chạy dữ liệu</h2>
-              {[
-                ["Auto-match threshold", "auto_match_threshold"],
-                ["Manual-review threshold", "manual_review_threshold"],
-                ["Date tolerance days", "date_tolerance_days"],
-                ["Amount tolerance VND", "amount_tolerance_vnd"],
-                ["Low OCR confidence threshold", "low_ocr_confidence_threshold"],
-                ["VAT tolerance", "vat_tolerance"],
-              ].map(([label, name]) => (
-                <Field key={name} label={label} name={name} type="number" value={rules[name]} onChange={(event) => setRules({ ...rules, [name]: Number(event.target.value) })} />
-              ))}
-              <button type="submit" disabled={busy}>Lưu rule</button>
-            </form>
-            <section className="side-panel">
-              <h2>Mục tiêu bước này</h2>
-              <p>Rule được dùng cho validation, chọn candidate và phân loại match. Nên chốt rule trước khi import dữ liệu sample hoặc dữ liệu doanh nghiệp.</p>
-              <Metric icon={Settings2} label="Auto threshold" value={rules.auto_match_threshold} />
-              <Metric icon={AlertTriangle} label="Manual threshold" value={rules.manual_review_threshold} tone="warn" />
-            </section>
-          </section>
-        )}
-
-        {activeStep === "vendors" && (
-          <section className="step-layout">
-            <section className="panel">
-              <h2>2. Import vendor master</h2>
-              <div className="upload-grid single">
-                <UploadCard
-                  icon={FileSpreadsheet}
-                  title="Vendor master CSV/XLSX"
-                  helper="Nguồn kiểm tra vendor_id, tax_code, bank_account và trạng thái active/inactive."
-                  inputRef={vendorFileRef}
-                  accept=".csv,.xlsx,.xls"
-                  onSubmit={() => importFile(vendorFileRef.current?.files?.[0], "/api/vendors/import", "vendor master")}
-                  primary
-                />
+          {/* STEP 5: PRE-PAYMENT VALIDATION */}
+          {activeStep === "prepayment" && (
+            <div className="premium-card p-5 space-y-4 slide-up">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Kiểm tra lỗi phiếu nhập</h2>
+                </div>
+                <button onClick={runValidation} disabled={busy} className="btn-primary py-1.5 px-4 text-xs flex items-center gap-1 shadow-sm">
+                  {busy ? <Loader2 className="animate-spin" size={12} /> : <FileCheck size={12} />}
+                  Chạy kiểm tra
+                </button>
               </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Metric icon={FileText} label="Tổng phiếu" value={invoices.length} />
+                <Metric icon={CheckCircle2} label="Phiếu Hợp lệ" value={invoices.filter((item) => item.status === "validated").length} tone="good" />
+                <Metric icon={AlertTriangle} label="Có lỗi/cảnh báo" value={reviewInvoices.length} tone="warn" />
+                <Metric icon={Banknote} label="Đã duyệt chi" value={approvedInvoices.length} />
+              </div>
+
               <DataTable
-                rows={vendors.slice(0, 10)}
+                rows={invoices}
+                pageSize={12}
+                empty="Chưa có dữ liệu phiếu nhập để đối chiếu"
                 columns={[
-                  { key: "vendor_id", label: "Mã Mối buôn" },
-                  { key: "vendor_name", label: "Tên mối buôn" },
-                  { key: "tax_code", label: "Mã số thuế" },
-                  { key: "bank_name", label: "Ngân hàng" },
-                  { key: "bank_account", label: "Số tài khoản" },
-                  { key: "bank_account_holder", label: "Chủ tài khoản" },
+                  { key: "invoice_number", label: "Mã Phiếu" },
+                  { key: "vendor_name", label: "Mối buôn" },
+                  { key: "total_amount", label: "Tổng tiền", render: (row) => formatMoney(row.total_amount, row.currency) },
+                  { key: "validation_status", label: "Kết quả quét", render: (row) => <StatusPill value={row.validation_status} /> },
                   { key: "status", label: "Trạng thái", render: (row) => <StatusPill value={row.status} /> },
+                  {
+                    key: "actions",
+                    label: "Hành động",
+                    render: (row) => (
+                      <div className="flex gap-1.5">
+                        <button onClick={() => approveInvoice(row)} disabled={busy} className="btn-primary py-0.5 px-2 text-[10px] rounded-md">
+                          Duyệt
+                        </button>
+                        <button onClick={() => rejectInvoice(row)} disabled={busy} className="btn-secondary text-rose-600 dark:text-rose-400 py-0.5 px-2 text-[10px] rounded-md">
+                          Từ chối
+                        </button>
+                      </div>
+                    ),
+                  },
                 ]}
               />
-            </section>
-            <section className="side-panel">
-              <Metric icon={FileSpreadsheet} label="Vendor đã import" value={vendors.length} />
-              <p>Đi tiếp khi vendor master đã có dữ liệu. Invoice register và payment batch sẽ dùng vendor master để kiểm soát trước thanh toán.</p>
-            </section>
-          </section>
-        )}
-
-        {activeStep === "invoice-source" && (
-          <section className="panel">
-            <h2>3. Tải lên phiếu nhập hàng / hóa đơn bán lẻ</h2>
-            <p className="helper-text">
-              Tải lên ảnh chụp phiếu giao hàng viết tay, biên nhận hoặc Excel. Tính năng OCR sẽ tự động đọc dữ liệu.
-            </p>
-            <div className="upload-grid">
-              <UploadCard
-                icon={Upload}
-                title="Ảnh chụp phiếu viết tay (OCR)"
-                helper="Tải lên ảnh/PDF phiếu nhập hàng viết tay để đọc tự động."
-                inputRef={fallbackFilesRef}
-                accept=".pdf,.png,.jpg,.jpeg,.txt,.xml"
-                multiple
-                onSubmit={() => uploadFallback(fallbackFilesRef.current?.files)}
-                primary
-              />
-              <UploadCard
-                icon={FileSpreadsheet}
-                title="Bảng kê Excel/CSV"
-                helper="File danh sách phiếu nhập chuẩn."
-                inputRef={invoiceRegisterRef}
-                accept=".csv,.xlsx,.xls"
-                onSubmit={() => importFile(invoiceRegisterRef.current?.files?.[0], "/api/invoices/import-register", "invoice register")}
-              />
             </div>
-            <DataTable
-              rows={invoices.slice(0, 12)}
-              columns={[
-                { key: "invoice_number", label: "Mã Phiếu" },
-                { key: "vendor_name", label: "Mối buôn" },
-                { key: "total_amount", label: "Tổng tiền", render: (row) => formatMoney(row.total_amount, row.currency) },
-                { key: "ocr_confidence", label: "Độ tin cậy OCR", render: (row) => row.ocr_confidence !== null && row.ocr_confidence !== undefined ? `${row.ocr_confidence}%` : "-" },
-                { key: "status", label: "Trạng thái", render: (row) => <StatusPill value={row.status} /> },
-                {
-                  key: "actions",
-                  label: "Thao tác",
-                  render: (row) => (
-                    <button onClick={() => quickEditInvoice(row)} disabled={busy}>Sửa nhanh</button>
-                  ),
-                },
-              ]}
-            />
-          </section>
-        )}
+          )}
 
-        {activeStep === "prepayment" && (
-          <section className="panel">
-            <div className="section-head">
-              <div>
-                <h2>4. Kiểm tra phiếu nhập</h2>
-                <p className="helper-text">Hệ thống sẽ chạy luật để phát hiện lỗi. Nếu ổn, hãy Duyệt phiếu để đưa vào danh sách trả tiền.</p>
-              </div>
-              <button onClick={runValidation} disabled={busy}>Chạy kiểm tra</button>
-            </div>
-            <div className="metrics-grid compact">
-              <Metric icon={FileText} label="Tổng phiếu" value={invoices.length} />
-              <Metric icon={CheckCircle2} label="Hợp lệ" value={invoices.filter((item) => item.status === "validated").length} tone="good" />
-              <Metric icon={AlertTriangle} label="Có lỗi" value={reviewInvoices.length} tone="warn" />
-              <Metric icon={Banknote} label="Đã duyệt" value={approvedInvoices.length} />
-            </div>
-            <DataTable
-              rows={invoices}
-              columns={[
-                { key: "invoice_number", label: "Mã Phiếu" },
-                { key: "vendor_name", label: "Mối buôn" },
-                { key: "total_amount", label: "Tổng tiền", render: (row) => formatMoney(row.total_amount, row.currency) },
-                { key: "validation_status", label: "Validation", render: (row) => <StatusPill value={row.validation_status} /> },
-                { key: "status", label: "Trạng thái", render: (row) => <StatusPill value={row.status} /> },
-                {
-                  key: "actions",
-                  label: "Thao tác",
-                  render: (row) => (
-                    <div className="row-actions">
-                      <button onClick={() => approveInvoice(row)} disabled={busy}>Duyệt</button>
-                      <button onClick={() => rejectInvoice(row)} disabled={busy}>Từ chối</button>
-                    </div>
-                  ),
-                },
-              ]}
-            />
-          </section>
-        )}
-
-        {activeStep === "payment" && (
-          <section className="step-layout">
-            <section className="panel">
-              <div className="section-head">
+          {/* STEP 6: PAYMENT BATCH */}
+          {activeStep === "payment" && (
+            <div className="premium-card p-5 space-y-4 slide-up">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
                 <div>
-                  <h2>5. Bảng kê thanh toán</h2>
-                  <p className="helper-text">Gom các phiếu đã duyệt vào bảng kê để biết cần trả bao nhiêu tiền cho mối nào.</p>
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Bảng kê thanh toán chuyển khoản</h2>
                 </div>
-                <button onClick={generatePaymentBatch} disabled={busy}>Sinh từ phiếu đã duyệt</button>
+                <div className="flex gap-2">
+                  <button onClick={generatePaymentBatch} disabled={busy} className="btn-primary py-1.5 px-4 text-xs flex items-center gap-1 shadow-sm">
+                    {busy ? <Loader2 className="animate-spin" size={12} /> : <CreditCard size={12} />}
+                    Sinh bảng kê
+                  </button>
+                  {paymentBatches.length > 0 && (
+                    <button onClick={() => clearData("/api/payment-batches", "bảng kê")} disabled={busy} className="btn-secondary text-rose-600 dark:text-rose-400 py-1.5 px-3 text-xs flex items-center gap-1">
+                      <Trash2 size={12} />
+                      Xóa bảng kê
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="upload-grid single">
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <UploadCard
                   icon={ClipboardCheck}
-                  title="Import bảng kê ngoài (Excel)"
-                  helper="Nhập bảng kê thanh toán nếu có sẵn."
+                  title="Import bảng kê (Excel)"
+                  helper="Nhập bảng kê chuyển khoản nếu tạo từ hệ thống khác."
                   inputRef={paymentFileRef}
                   accept=".csv,.xlsx,.xls"
                   onSubmit={() => importFile(paymentFileRef.current?.files?.[0], "/api/payment-batches/import", "bảng kê")}
-                  primary
+                  busy={busy}
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-3 max-w-md">
+                <Metric icon={ClipboardCheck} label="Số dòng bảng kê" value={paymentBatches.length} />
+                <Metric icon={CheckCircle2} label="Chờ trả tiền" value={paymentBatches.filter((item) => item.approval_status === "approved").length} tone="good" />
+              </div>
+
               <DataTable
                 rows={paymentBatches}
+                pageSize={12}
+                empty="Chưa có bảng kê thanh toán nào"
                 columns={[
                   { key: "payment_id", label: "Mã Bảng kê" },
                   { key: "vendor_id", label: "Mối buôn" },
-                  { key: "scheduled_payment_date", label: "Ngày trả" },
-                  { key: "approved_amount", label: "Tiền cần trả", render: (row) => formatMoney(row.approved_amount, row.currency) },
+                  { key: "scheduled_payment_date", label: "Ngày chi dự kiến" },
+                  { key: "approved_amount", label: "Tiền duyệt chi", render: (row) => formatMoney(row.approved_amount, row.currency) },
                   { key: "approval_status", label: "Trạng thái", render: (row) => <StatusPill value={row.approval_status} /> },
                 ]}
               />
-            </section>
-            <section className="side-panel">
-              <Metric icon={ClipboardCheck} label="Dòng bảng kê" value={paymentBatches.length} />
-              <Metric icon={CheckCircle2} label="Chờ trả" value={paymentBatches.filter((item) => item.approval_status === "approved").length} tone="good" />
-            </section>
-          </section>
-        )}
+            </div>
+          )}
 
-        {activeStep === "bank" && (
-          <section className="step-layout">
-            <section className="panel">
-              <h2>6. Import bank statement</h2>
-              <div className="upload-grid single">
+          {/* STEP 7: BANK STATEMENT */}
+          {activeStep === "bank" && (
+            <div className="premium-card p-5 space-y-4 slide-up">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Sao kê tài khoản ngân hàng</h2>
+                </div>
+                {transactions.length > 0 && (
+                  <button onClick={() => clearData("/api/bank-transactions", "giao dịch ngân hàng")} disabled={busy} className="btn-secondary py-1 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                    <Trash2 size={12} />
+                    Xóa tất cả
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <UploadCard
                   icon={Banknote}
-                  title="Bank statement CSV/XLSX"
-                  helper="Import sao kê sau khi có danh sách payment được duyệt."
+                  title="Tải lên tệp sao kê ngân hàng (Excel/CSV)"
+                  helper="Nhập lịch sử biến động số dư thực tế."
                   inputRef={bankFileRef}
                   accept=".csv,.xlsx,.xls"
                   onSubmit={() => importFile(bankFileRef.current?.files?.[0], "/api/bank-transactions/import", "sao kê ngân hàng")}
                   primary
+                  busy={busy}
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-3 max-w-md">
+                <Metric icon={Banknote} label="Tổng giao dịch" value={transactions.length} />
+                <Metric icon={FileSpreadsheet} label="Giao dịch chi ra (Outflow)" value={transactions.filter((item) => item.direction === "outflow").length} />
+              </div>
+
               <DataTable
-                rows={transactions.slice(0, 20)}
+                rows={transactions}
+                pageSize={12}
+                empty="Chưa có dữ liệu sao kê tài khoản"
                 columns={[
                   { key: "transaction_id", label: "Mã GD" },
                   { key: "transaction_date", label: "Ngày" },
-                  { key: "description", label: "Mô tả" },
+                  { key: "description", label: "Nội dung chuyển khoản" },
                   { key: "amount", label: "Số tiền", render: (row) => formatMoney(row.amount, row.currency) },
-                  { key: "direction", label: "Loại", render: (row) => <StatusPill value={row.direction} /> },
+                  { key: "direction", label: "Loại GD", render: (row) => <StatusPill value={row.direction} /> },
                   { key: "reference_code", label: "Reference" },
                 ]}
               />
-            </section>
-            <section className="side-panel">
-              <Metric icon={Banknote} label="Bank transactions" value={transactions.length} />
-              <Metric icon={FileSpreadsheet} label="Outflow" value={transactions.filter((item) => item.direction === "outflow").length} />
-            </section>
-          </section>
-        )}
+            </div>
+          )}
 
-        {activeStep === "reconcile" && (
-          <section className="panel">
-            <div className="section-head">
-              <div>
-                <h2>7. Đối soát payment với ngân hàng</h2>
-                <p className="helper-text">Engine chỉ reconcile payment/invoice đã approved hoặc scheduled. Giao dịch ngân hàng không liên quan sẽ thành exception.</p>
+          {/* STEP 8: RECONCILIATION */}
+          {activeStep === "reconcile" && (
+            <div className="premium-card p-5 space-y-4 slide-up">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Đối soát chuyển khoản ngân hàng</h2>
+                </div>
+                <button onClick={runReconciliation} disabled={busy} className="btn-primary py-1.5 px-4 text-xs flex items-center gap-1 shadow-sm">
+                  {busy ? <Loader2 className="animate-spin" size={12} /> : <Activity size={12} />}
+                  Chạy đối soát
+                </button>
               </div>
-              <button onClick={runReconciliation} disabled={busy}>Chạy đối soát</button>
-            </div>
-            <div className="metrics-grid compact">
-              <Metric icon={CheckCircle2} label="Matched/Reconciled" value={overview.matched_count || 0} tone="good" />
-              <Metric icon={AlertTriangle} label="Amount mismatch" value={overview.amount_mismatch_count || 0} tone="danger" />
-              <Metric icon={FileText} label="Approved unpaid" value={overview.unmatched_invoice_count || 0} tone="warn" />
-              <Metric icon={Banknote} label="Unmatched bank" value={overview.unmatched_transaction_count || 0} tone="danger" />
-            </div>
-            <h2>Kết quả đối soát</h2>
-            <DataTable
-              rows={matches}
-              columns={[
-                { key: "vendor_name", label: "Mối buôn" },
-                { key: "invoice_number", label: "Mã Phiếu" },
-                { key: "invoice_amount", label: "Tiền Phiếu", render: (row) => formatMoney(row.invoice_amount) },
-                { key: "transaction_description", label: "Nội dung CK" },
-                { key: "transaction_amount", label: "Tiền CK", render: (row) => formatMoney(row.transaction_amount) },
-                { key: "match_score", label: "Điểm số", render: (row) => `${row.match_score}/100` },
-                { key: "match_status", label: "Trạng thái", render: (row) => <StatusPill value={row.match_status} /> },
-                { key: "amount_diff", label: "Lệch tiền", render: (row) => formatMoney(row.amount_diff || 0) },
-                { key: "reason", label: "Chi tiết đối soát" },
-                {
-                  key: "actions",
-                  label: "Thao tác",
-                  render: (row) => (
-                    <div className="row-actions">
-                      <button onClick={() => approveMatch(row.id)}>Duyệt</button>
-                      <button onClick={() => rejectMatch(row.id)}>Từ chối</button>
-                    </div>
-                  ),
-                },
-              ]}
-            />
-            <h2>Ngoại lệ cần xử lý</h2>
-            <DataTable
-              rows={exceptions}
-              columns={[
-                { key: "exception_type", label: "Loại", render: (row) => <StatusPill value={row.exception_type} /> },
-                { key: "severity", label: "Mức độ", render: (row) => <StatusPill value={row.severity} /> },
-                { key: "status", label: "Trạng thái", render: (row) => <StatusPill value={row.status} /> },
-                { key: "invoice_number", label: "Hóa đơn" },
-                { key: "transaction_id", label: "Giao dịch" },
-                { key: "message", label: "Nội dung" },
-                {
-                  key: "workflow",
-                  label: "Xử lý",
-                  render: (row) => (
-                    <div className="exception-edit">
-                      <select value={exceptionDrafts[row.id]?.status || row.status || "open"} onChange={(event) => setExceptionDrafts({ ...exceptionDrafts, [row.id]: { ...(exceptionDrafts[row.id] || {}), status: event.target.value } })}>
-                        <option value="open">Mở</option>
-                        <option value="in_review">Đang xử lý</option>
-                        <option value="resolved">Đã xử lý</option>
-                        <option value="dismissed">Bỏ qua</option>
-                      </select>
-                      <input placeholder="Ghi chú" value={exceptionDrafts[row.id]?.note || row.note || ""} onChange={(event) => setExceptionDrafts({ ...exceptionDrafts, [row.id]: { ...(exceptionDrafts[row.id] || {}), note: event.target.value } })} />
-                      <button onClick={() => updateException(row.id, row.status)}>Lưu</button>
-                    </div>
-                  ),
-                },
-              ]}
-            />
-          </section>
-        )}
 
-        {activeStep === "dashboard" && (
-          <section className="panel">
-            <div className="section-head">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Metric icon={CheckCircle2} label="Khớp hoàn toàn" value={overview.matched_count || 0} tone="good" />
+                <Metric icon={AlertTriangle} label="Lệch số tiền" value={overview.amount_mismatch_count || 0} tone="danger" />
+                <Metric icon={FileText} label="Phiếu chưa trả tiền" value={overview.unmatched_invoice_count || 0} tone="warn" />
+                <Metric icon={Banknote} label="Sao kê chưa khớp" value={overview.unmatched_transaction_count || 0} tone="danger" />
+              </div>
+
               <div>
-                <h2>8. Dashboard quản lý và báo cáo</h2>
-                <p className="helper-text">AI report chỉ diễn giải số liệu backend đã tính, không tự bịa số.</p>
-              </div>
-              <div className="row-actions">
-                <button onClick={generateReport} disabled={busy}>Tạo báo cáo</button>
-                <a className="button-link" href={`${API_BASE}/api/reports/export/reconciliation.xlsx`}>Export đối soát</a>
-                <a className="button-link" href={`${API_BASE}/api/reports/export/exceptions.xlsx`}>Export ngoại lệ</a>
-              </div>
-            </div>
-            <div className="metrics-grid">
-              <Metric icon={FileText} label="Tổng hóa đơn" value={overview.total_invoices || 0} />
-              <Metric icon={CheckCircle2} label="Tỷ lệ match" value={`${overview.match_rate || overview.matched_rate || 0}%`} tone="good" />
-              <Metric icon={AlertTriangle} label="Ngoại lệ mở" value={overview.open_exceptions || 0} tone="warn" />
-              <Metric icon={Banknote} label="Tổng tiền phiếu nhập" value={formatMoney(overview.total_invoice_value || 0)} />
-              <Metric icon={Banknote} label="Tiền đã đối soát khớp" value={formatMoney(overview.matched_value || 0)} tone="good" />
-              <Metric icon={Banknote} label="Giá trị chưa match" value={formatMoney(overview.unmatched_value || overview.total_unmatched_value || 0)} tone="danger" />
-              <Metric icon={FileSpreadsheet} label="Giao dịch ngân hàng" value={overview.total_bank_transactions || 0} />
-              <Metric icon={WandSparkles} label="OCR trung bình" value={`${overview.average_ocr_confidence || 0}%`} />
-            </div>
-            {reportText && <pre className="report-box">{reportText}</pre>}
-            <div className="split">
-              <section>
-                <h2>Vendor có nhiều lỗi</h2>
+                <h3 className="text-xs font-bold text-slate-850 dark:text-zinc-100 mb-2 uppercase tracking-wider">Kết quả đối soát tự động</h3>
                 <DataTable
-                  rows={overview.top_vendor_exceptions || []}
+                  rows={matches}
+                  pageSize={10}
+                  empty="Chưa chạy đối soát hoặc không tìm thấy kết quả"
                   columns={[
-                    { key: "vendor_name", label: "Vendor" },
-                    { key: "count", label: "Số lỗi" },
+                    { key: "vendor_name", label: "Mối buôn" },
+                    { key: "invoice_number", label: "Mã Phiếu" },
+                    { key: "invoice_amount", label: "Tiền Phiếu", render: (row) => formatMoney(row.invoice_amount) },
+                    { key: "transaction_description", label: "Nội dung CK" },
+                    { key: "transaction_amount", label: "Tiền thực CK", render: (row) => formatMoney(row.transaction_amount) },
+                    { key: "match_score", label: "Điểm khớp", render: (row) => `${row.match_score}/100` },
+                    { key: "match_status", label: "Kết quả", render: (row) => <StatusPill value={row.match_status} /> },
+                    { key: "amount_diff", label: "Chênh lệch", render: (row) => formatMoney(row.amount_diff || 0) },
+                    { key: "reason", label: "Lý do đối soát" },
+                    {
+                      key: "actions",
+                      label: "Xác thực",
+                      render: (row) => (
+                        <div className="flex gap-1">
+                          <button onClick={() => approveMatch(row.id)} className="btn-primary py-0.5 px-2 text-[10px] rounded-md">
+                            Duyệt
+                          </button>
+                          <button onClick={() => rejectMatch(row.id)} className="btn-secondary py-0.5 px-2 text-[10px] text-rose-600 dark:text-rose-400 rounded-md">
+                            Lệch
+                          </button>
+                        </div>
+                      ),
+                    },
                   ]}
                 />
-              </section>
-              <section>
-                <h2>Audit log gần đây</h2>
+              </div>
+
+              <div className="pt-2">
+                <h3 className="text-xs font-bold text-slate-850 dark:text-zinc-100 mb-2 uppercase tracking-wider">Ngoại lệ & Lỗi giao dịch cần xử lý</h3>
                 <DataTable
-                  rows={auditLogs.slice(0, 10)}
+                  rows={exceptions}
+                  pageSize={10}
+                  empty="Không phát hiện lỗi ngoại lệ nào"
                   columns={[
-                    { key: "action", label: "Hành động" },
-                    { key: "entity_type", label: "Đối tượng" },
-                    { key: "created_at", label: "Thời gian" },
+                    { key: "exception_type", label: "Loại lỗi", render: (row) => <StatusPill value={row.exception_type} /> },
+                    { key: "severity", label: "Mức độ", render: (row) => <StatusPill value={row.severity} /> },
+                    { key: "status", label: "Trạng thái", render: (row) => <StatusPill value={row.status} /> },
+                    { key: "invoice_number", label: "Hóa đơn" },
+                    { key: "transaction_id", label: "Giao dịch" },
+                    { key: "message", label: "Nội dung lỗi" },
+                    {
+                      key: "workflow",
+                      label: "Quyết định",
+                      render: (row) => (
+                        <div className="flex items-center gap-1">
+                          <select
+                            className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700/80 rounded-md py-0.5 px-1.5 text-[10px]"
+                            value={exceptionDrafts[row.id]?.status || row.status || "open"}
+                            onChange={(event) => setExceptionDrafts({ ...exceptionDrafts, [row.id]: { ...(exceptionDrafts[row.id] || {}), status: event.target.value } })}
+                          >
+                            <option value="open">Mở</option>
+                            <option value="in_review">Rà soát</option>
+                            <option value="resolved">Đã giải quyết</option>
+                            <option value="dismissed">Bỏ qua</option>
+                          </select>
+                          <input
+                            placeholder="Ghi chú..."
+                            className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700/80 rounded-md py-0.5 px-1.5 text-[10px] w-24 placeholder-slate-400"
+                            value={exceptionDrafts[row.id]?.note || row.note || ""}
+                            onChange={(event) => setExceptionDrafts({ ...exceptionDrafts, [row.id]: { ...(exceptionDrafts[row.id] || {}), note: event.target.value } })}
+                          />
+                          <button onClick={() => updateException(row.id, row.status)} className="btn-primary py-0.5 px-2 text-[10px] rounded-md">Lưu</button>
+                        </div>
+                      ),
+                    },
                   ]}
                 />
-              </section>
+              </div>
             </div>
-            <h2>Lịch sử báo cáo</h2>
-            <DataTable
-              rows={reports}
-              columns={[
-                { key: "report_type", label: "Loại" },
-                { key: "report_content", label: "Nội dung" },
-                { key: "created_at", label: "Tạo lúc" },
-              ]}
-            />
-          </section>
-        )}
+          )}
 
-        <footer className="step-footer">
-          <button onClick={previousStep} disabled={activeIndex === 0}>Bước trước</button>
-          <button onClick={nextStep} disabled={activeIndex === steps.length - 1}>Bước tiếp theo</button>
+          {/* STEP 9: DASHBOARD & REPORTING */}
+          {activeStep === "dashboard" && (
+            <div className="space-y-5 slide-up">
+              <div className="premium-card p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Báo cáo & Phân tích nghiệp vụ</h2>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <button onClick={generateReport} disabled={busy} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1 shadow-sm">
+                      {busy ? <Loader2 className="animate-spin" size={12} /> : <WandSparkles size={12} />}
+                      Tạo báo cáo AI
+                    </button>
+                    <a className="btn-secondary py-1.5 px-3 text-xs" href={`${API_BASE}/api/reports/export/reconciliation.xlsx`}>Tải báo cáo đối soát</a>
+                    <a className="btn-secondary py-1.5 px-3 text-xs text-rose-600 dark:text-rose-400" href={`${API_BASE}/api/reports/export/exceptions.xlsx`}>Tải báo cáo ngoại lệ</a>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Metric icon={FileText} label="Tổng hóa đơn" value={overview.total_invoices || 0} />
+                  <Metric icon={CheckCircle2} label="Tỷ lệ khớp tiền" value={`${overview.match_rate || overview.matched_rate || 0}%`} tone="good" />
+                  <Metric icon={AlertTriangle} label="Ngoại lệ mở" value={overview.open_exceptions || 0} tone="warn" />
+                  <Metric icon={Banknote} label="Tổng nợ hàng" value={formatMoney(overview.total_invoice_value || 0)} />
+                  <Metric icon={Banknote} label="Đã thanh toán" value={formatMoney(overview.matched_value || 0)} tone="good" />
+                  <Metric icon={Banknote} label="Chênh lệch" value={formatMoney(overview.unmatched_value || overview.total_unmatched_value || 0)} tone="danger" />
+                  <Metric icon={FileSpreadsheet} label="Tổng giao dịch sao kê" value={overview.total_bank_transactions || 0} />
+                  <Metric icon={WandSparkles} label="Độ tin cậy OCR" value={`${overview.average_ocr_confidence || 0}%`} />
+                </div>
+              </div>
+
+              {reportText && (
+                <div className="premium-card p-5 space-y-2.5">
+                  <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
+                    <WandSparkles size={14} className="text-purple-500" />
+                    AI diễn giải số liệu đối soát
+                  </h3>
+                  <pre className="p-3 bg-slate-50 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800 text-[11px] font-sans leading-relaxed text-slate-700 dark:text-zinc-300 rounded-xl overflow-auto whitespace-pre-wrap max-h-[260px]">
+                    {reportText}
+                  </pre>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="premium-card p-5 space-y-3">
+                  <h3 className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 uppercase tracking-wider">
+                    <AlertCircle size={14} />
+                    Vendor có nhiều sai lệch
+                  </h3>
+                  <DataTable
+                    rows={overview.top_vendor_exceptions || []}
+                    pageSize={6}
+                    empty="Không phát hiện sai lệch"
+                    columns={[
+                      { key: "vendor_name", label: "Mối buôn" },
+                      { key: "count", label: "Số lượng lỗi" },
+                    ]}
+                  />
+                </div>
+
+                <div className="premium-card p-5 space-y-3">
+                  <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 uppercase tracking-wider">
+                    <History size={14} className="text-indigo-500" />
+                    Audit logs gần đây
+                  </h3>
+                  <DataTable
+                    rows={auditLogs}
+                    pageSize={6}
+                    empty="Chưa ghi nhận hành động"
+                    columns={[
+                      { key: "action", label: "Hành động" },
+                      { key: "entity_type", label: "Loại" },
+                      { key: "created_at", label: "Thời gian" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="premium-card p-5 space-y-3">
+                <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 uppercase tracking-wider">
+                  <FileText size={14} className="text-emerald-500" />
+                  Báo cáo đã sinh
+                </h3>
+                <DataTable
+                  rows={reports}
+                  pageSize={6}
+                  empty="Chưa sinh báo cáo nào"
+                  columns={[
+                    { key: "report_type", label: "Loại" },
+                    { key: "report_content", label: "Tóm tắt" },
+                    { key: "created_at", label: "Thời gian tạo" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* STEP BUTTON FOOTER */}
+        <footer className="p-4 border-t border-slate-200/50 dark:border-zinc-800/60 bg-white/60 dark:bg-zinc-900/40 backdrop-blur-md flex justify-between items-center sticky bottom-0 z-10">
+          <button
+            onClick={previousStep}
+            disabled={activeIndex === 0}
+            className="btn-secondary text-xs px-3.5 py-1.5"
+          >
+            Bước trước
+          </button>
+          <button
+            onClick={nextStep}
+            disabled={activeIndex === steps.length - 1}
+            className="btn-primary text-xs px-3.5 py-1.5"
+          >
+            Bước tiếp theo
+          </button>
         </footer>
       </section>
+
+      {/* SEQUENTIAL OCR UPLOAD MODAL */}
+      {uploadProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-5 w-full max-w-xs shadow-xl slide-up flex flex-col items-center">
+            <div className="p-3 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 rounded-full animate-bounce mb-3">
+              <Upload size={22} />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100 text-center mb-1">Đang trích xuất OCR...</h3>
+
+            <div className="w-full bg-slate-100 dark:bg-zinc-800 p-3 rounded-xl border border-slate-200/40 dark:border-zinc-700/40 space-y-3">
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="font-semibold text-slate-600 dark:text-zinc-300 truncate w-3/4">Tệp: {uploadProgress.currentFile}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{uploadProgress.current}/{uploadProgress.total}</span>
+              </div>
+
+              <div className="w-full bg-slate-200 dark:bg-zinc-700 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 dark:text-zinc-500 pt-1.5 border-t border-slate-200/40 dark:border-zinc-700/40">
+                <span className="text-emerald-600 dark:text-emerald-400">Thành công: {uploadProgress.success}</span>
+                <span className="text-rose-600 dark:text-rose-400">Thất bại: {uploadProgress.error}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK EDIT INVOICE MODAL */}
+      <QuickEditModal
+        invoice={editingInvoice}
+        isOpen={!!editingInvoice}
+        onClose={() => setEditingInvoice(null)}
+        onSave={async (invoiceId, updatedFields) => {
+          await withBusy(() => request(`/api/invoices/${invoiceId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...editingInvoice,
+              ...updatedFields,
+              status: "needs_review",
+              validation_status: "pending"
+            })
+          }), "Đã cập nhật phiếu nhập thành công");
+          setEditingInvoice(null);
+          await refresh();
+        }}
+        busy={busy}
+      />
+
+      {/* SAMPLE PREVIEW MODAL */}
+      <SamplePreviewModal
+        preview={samplePreview}
+        isOpen={!!samplePreview}
+        onClose={() => setSamplePreview(null)}
+        renderContent={(isFullscreen) => renderSamplePreview(isFullscreen)}
+      />
+
     </main>
   );
 }

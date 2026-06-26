@@ -93,6 +93,8 @@ def _sqlite_compat_migration() -> None:
             "invoice_template_code": "VARCHAR(64)",
             "vendor_id": "VARCHAR(64)",
             "vendor_bank_account": "VARCHAR(64)",
+            "vendor_address": "TEXT",
+            "vendor_phone": "VARCHAR(64)",
             "buyer_name": "VARCHAR(255)",
             "buyer_tax_code": "VARCHAR(64)",
             "vat_rate": "FLOAT",

@@ -2,27 +2,46 @@
 
 Last updated: 2026-06-26
 
-## Update moi nhat ve input mau va XML
+## Cập nhật mới nhất về Giao diện & Cấu hình Frontend (React + Tailwind CSS)
 
-- Khong bo XML hoan toan. XML hoa don dien tu Viet Nam duoc giu nhu nguon phu/sach cho nha cung cap chinh thuc, khong phai luong chinh.
-- Luong chinh cua nha hang nho/F&B van la phieu nhap hang, anh/PDF bien nhan, bang ke thanh toan va sao ke ngan hang.
-- `sample_inputs` da duoc cap nhat de generate:
-  - `vat_einvoice` XML theo cau truc `HDon/DLHDon/TTChung/NBan/NMua/DSHHDVu/TToan`.
-  - `sales_einvoice` XML cho hoa don ban hang.
-  - `pos_receipt` va `vendor_pdf_receipt` cho OCR/fallback.
-- Backend da co parser `parse_vietnam_einvoice_xml` trong `backend/app/utils.py`.
-- Backend tu nhan dien file `.xml` trong luong upload invoice batch va endpoint rieng `POST /api/invoices/import-xml`.
-- Frontend da cho phep chon `.xml` trong upload phieu nhap hang.
-- Frontend co muc moi `Du lieu mau` de generate sample tu giao dien.
-- Backend co endpoint:
-  - `POST /api/sample-data/generate?clear_existing=true|false`
-  - `DELETE /api/sample-data/generated`
-- Sample generated files khong con duoc giu trong `sample_inputs/raw`/`processed`. API generate tao file tam, nap vao bang `sample_generated_files`, sau do xoa file vat ly.
-- Download sample:
+Hệ thống Frontend đã được nâng cấp toàn diện lên một giao diện F&B chuyên nghiệp, hiện đại và tối giản:
+- **Framework & CSS**: Đã cài đặt và tích hợp **Tailwind CSS v3** cùng **PostCSS** và **Autoprefixer**. Đã cấu hình tệp `tailwind.config.js`, `postcss.config.js`, và `vite.config.js` để tự động biên dịch và hot-reload.
+- **Bố cục Sidebar (Left Navigation)**: Chuyển đổi từ thanh menu ngang cũ sang cấu trúc Sidebar bên trái chuyên nghiệp, quản lý trực quan tiến độ của luồng nghiệp vụ 9 bước.
+- **Light Mode & Dark Mode**: Bổ sung nút chuyển đổi theme (Sun/Moon) trên Sidebar, tự động lưu lựa chọn vào `localStorage` và đồng bộ giao diện ở cả chế độ tối (dark mode) và sáng (light mode).
+- **Thiết kế tối giản (Decluttered UI)**: 
+  - Loại bỏ các cột giải thích nghiệp vụ dài dòng bên phải (side panels) của các bước, chuyển về bố cục **1 cột duy nhất** giúp các bảng dữ liệu rộng rãi và dễ nhìn hơn.
+  - Rút gọn các dòng mô tả phụ và nhãn chữ hướng dẫn để giao diện thanh thoát, tập trung vào nghiệp vụ.
+- **Thành phần UI nâng cấp**:
+  - `DataTable`: Bảng dữ liệu được thiết kế lại theo phong cách hiện đại (border-radius, shadow, màu nền mờ) và đã được tích hợp **Bộ Phân Trang tự động (Pagination)** ở chân trang.
+  - `UploadCard`: Hỗ trợ **Xem trước tệp (File Preview)** trực quan bằng cách hiển thị các ảnh thumbnail nhỏ đối với các file ảnh vừa được chọn trước khi upload.
+  - `QuickEditModal`: Thay thế hộp thoại trình duyệt `window.prompt` thô sơ bằng một **Modal sửa nhanh tùy chỉnh bằng React** có hiệu ứng chuyển động phóng to mượt mà.
+  - `Metric`: Các thẻ chỉ số dạng Glassmorphism sử dụng icon màu sắc tương phản nổi bật theo tình trạng dữ liệu (Xanh - Hợp lệ, Vàng - Cảnh báo, Đỏ - Ngoại lệ).
+
+## Khắc phục lỗi Hệ thống & API đường dẫn
+- **Sửa lỗi trắng màn hình**: Đã khai báo lại đầy đủ hai hàm chuyển tiếp `previousStep()` và `nextStep()` trong `App.jsx` bị thiếu trước đó.
+- **Sửa lỗi 404 API**: Cập nhật hàm tải dữ liệu `loadData()` trong `App.jsx` để gọi đúng các API endpoint của backend:
+  - Thay `/api/reconciliation/results/overview` thành `/api/dashboard/summary`.
+  - Thay `/api/reconciliation/exceptions` thành `/api/exceptions`.
+
+---
+
+## Cập nhật về Input mẫu và XML cũ
+
+- Không bỏ XML hoàn toàn. XML hóa đơn điện tử Việt Nam được giữ như nguồn phụ/sách cho nhà cung cấp chính thức, không phải luồng chính.
+- Luồng chính của nhà hàng nhỏ/F&B vẫn là phiếu nhập hàng, ảnh/PDF biên nhận, bảng kê thanh toán và sao kê ngân hàng.
+- `sample_inputs` đã được cập nhật để generate:
+  - `vat_einvoice` XML theo cấu trúc `HDon/DLHDon/TTChung/NBan/NMua/DSHHDVu/TToan`.
+  - `sales_einvoice` XML cho hóa đơn bán hàng.
+  - `pos_receipt` và `vendor_pdf_receipt` cho OCR/fallback.
+- Backend đã có parser `parse_vietnam_einvoice_xml` trong `backend/app/utils.py`.
+- Backend tự nhận diện file `.xml` trong luồng upload invoice batch và endpoint riêng `POST /api/invoices/import-xml`.
+- Frontend cho phép chọn `.xml` trong upload phiếu nhập hàng.
+- Download sample qua API:
   - `GET /api/sample-data/files`
   - `GET /api/sample-data/files/{file_id}/download`
   - `GET /api/sample-data/files/download.zip`
-- Anh/PDF sample hoa don ban hang da doi sang layout giong anh mau nguoi dung gui: header ten cua hang, tieu de `HOA DON BAN HANG`, bang 10 dong voi cot `STT`, `TEN HANG`, `SO LUONG`, `DON GIA`, `THANH TIEN`, dong `CONG`, thanh tien va chu ky.
+
+---
 
 ## Định vị dự án (Project Positioning)
 
@@ -38,22 +57,22 @@ FinRecon AI - Hệ thống Đối soát & Kiểm soát Hóa đơn tự động c
 4. **Fuzzy Matching nâng cao**: Loại bỏ stop-words tiếng Việt thông dụng khi đối soát nội dung chuyển khoản (như "ck", "tien", "thanh toan", "cho", "mua") và chuẩn hóa không dấu (unaccent) nhằm tối ưu hóa độ chính xác đối soát tên mối buôn viết tắt/dân dã (ví dụ: "ck tien thit chi lan" khớp với "Chị Lan Mối Thịt").
 5. **Đồng bộ thông tin ngân hàng Mối buôn**: Bổ sung trường **Tên chủ tài khoản (`bank_account_holder`)** viết hoa không dấu (ví dụ: `NGUYEN THI LAN`) để tăng tính xác thực cho luồng chuyển tiền và đối soát.
 6. **Giao diện 100% Tiếng Việt**: Trải nghiệm UI trực quan, gần gũi với kế toán nhà hàng (đổi tên các thuật ngữ chuyên ngành sang tiếng Việt).
-7. **Loại bỏ hoàn toàn XML**: Đã lược bỏ mọi tính năng nhập hóa đơn điện tử XML (E-Invoicing) của doanh nghiệp lớn khỏi cả backend, frontend và bộ sinh dữ liệu mẫu.
 
 ---
 
-## Quy trình nghiệp vụ mới (8 Bước)
+## Quy trình nghiệp vụ mới (9 Bước)
 
-Giao diện hệ thống tuân theo luồng công việc 8 bước chuẩn hóa bằng tiếng Việt:
+Giao diện hệ thống tuân theo luồng công việc 9 bước chuẩn hóa bằng tiếng Việt:
 
-1. **Cấu hình Luật Đối soát**: Thiết lập các tham số dung sai số tiền (tolerance), ngưỡng điểm khớp tự động, ngưỡng điểm cần duyệt tay.
-2. **Danh mục Mối buôn (Vendor Master)**: Import danh sách các nhà cung cấp, mối buôn chợ (ví dụ: Chị Lan Mối Thịt, Bác Hải Rau Củ) kèm thông tin tài khoản ngân hàng đầy đủ: **Ngân hàng, Số tài khoản, Tên chủ tài khoản**.
-3. **Nguồn phiếu nhập hàng**: Upload ảnh chụp hóa đơn in nhiệt từ máy POS (`.png` tự động chạy EasyOCR) hoặc tệp Hóa đơn điện tử VAT (`.pdf`). Hỗ trợ **Sửa Nhanh (Quick Edit)** trực tiếp thông tin tiền/tên mối buôn trên lưới nếu OCR nhận diện sai. Có hiển thị **Độ tin cậy OCR**.
-4. **Kiểm tra phiếu nhập (Validation)**: Chạy công cụ kiểm tra tính hợp lệ trước khi duyệt chi. Chuyển trạng thái phiếu nhập sang "Đã duyệt" để đưa vào danh sách thanh toán.
-5. **Bảng kê thanh toán**: Tự động gom các phiếu nhập đã duyệt thành bảng kê thanh toán chi tiết theo từng mối buôn.
-6. **Import Sao kê Ngân hàng (Bank Statement)**: Import tệp sao kê tài khoản ngân hàng của nhà hàng dưới dạng Excel/CSV.
-7. **Đối soát tự động (Reconciliation)**: Thực hiện đối soát thông minh (hỗ trợ so khớp 1-to-N). Bảng kết quả hiển thị chi tiết tên mối buôn, số tiền hóa đơn và số tiền chuyển khoản thực tế. Phân loại các giao dịch thành: khớp hoàn toàn, khớp cần duyệt tay, lệch tiền hoặc đưa vào danh sách Ngoại lệ (Exceptions).
-8. **Báo cáo & Dashboard**: Xem báo cáo tổng quan kết quả đối soát kèm chỉ số **Tổng giá trị tiền hàng** và **Giá trị tiền đã đối soát**. Kiểm tra vết log và xuất dữ liệu đối soát ra Excel.
+1. **Dữ liệu mẫu**: Tạo bộ file mẫu F&B để chạy thử nghiệm nhanh toàn bộ quy trình.
+2. **Cấu hình Quy tắc**: Thiết lập các tham số dung sai số tiền (tolerance), ngưỡng điểm khớp tự động, ngưỡng điểm cần duyệt tay.
+3. **Danh mục Mối buôn (Vendor Master)**: Import danh sách các nhà cung cấp, mối buôn chợ kèm thông tin tài khoản ngân hàng đầy đủ: **Ngân hàng, Số tài khoản, Tên chủ tài khoản**.
+4. **Phiếu nhập hàng**: Tải lên ảnh chụp phiếu giao hàng viết tay, biên nhận hoặc Excel để OCR tự động trích xuất.
+5. **Kiểm tra phiếu nhập (Validation)**: Chạy công cụ kiểm tra tính hợp lệ trước khi duyệt chi. Chuyển trạng thái phiếu nhập sang "Đã duyệt" để chuẩn bị thanh toán.
+6. **Bảng kê thanh toán**: Tự động gom các phiếu nhập đã duyệt thành bảng kê thanh toán chi tiết theo từng mối buôn.
+7. **Import Sao kê Ngân hàng (Bank Statement)**: Import tệp sao kê tài khoản ngân hàng dưới dạng Excel/CSV.
+8. **Đối soát thanh toán (Reconciliation)**: Thực hiện đối soát thông minh (hỗ trợ so khớp 1-to-N). Bảng kết quả hiển thị khớp, lệch tiền hoặc Ngoại lệ (Exceptions).
+9. **Bảng điều khiển (Dashboard)**: Xem báo cáo tổng quan kết quả đối soát kèm chỉ số tổng tiền hàng, tỷ lệ khớp tiền, các vendor có nhiều lỗi và audit logs.
 
 ---
 
@@ -72,39 +91,3 @@ cd "D:\Du-an\Invoice Automation & Reconciliation System\frontend"
 npm run dev
 ```
 *Địa chỉ ứng dụng:* `http://127.0.0.1:5173`
-
----
-
-## Tài khoản Đăng nhập Demo
-
-Sử dụng mật khẩu chung **`demo123`** cho các tài khoản:
-- Kế toán trưởng / Admin: `admin@finrecon.local`
-- Nhân viên kiểm tra: `reviewer@finrecon.local`
-- Kế toán viên: `accountant@finrecon.local`
-
----
-
-## Sơ đồ cấu trúc dữ liệu Backend
-
-Các bảng chính trong SQLite (`backend/data/finrecon.db`):
-- `vendors`: Danh mục mối buôn (tên mối buôn, tài khoản ngân hàng, tên chủ tài khoản, ngân hàng, địa chỉ, email/sđt, trạng thái).
-- `invoices`: Phiếu nhập hàng (lưu thông tin OCR, số tiền, mối buôn, mã phiếu tự sinh).
-- `bank_transactions`: Sao kê ngân hàng (ngày giao dịch, số tiền, nội dung chuyển khoản).
-- `payment_batches`: Danh sách các khoản thanh toán dự kiến.
-- `reconciliation_matches`: Kết quả đối soát (bao gồm liên kết 1-to-N giữa giao dịch ngân hàng và các phiếu nhập).
-- `reconciliation_exceptions`: Các trường hợp lệch tiền hoặc không tìm thấy mối buôn cần xử lý tay.
-
----
-
-## Bộ dữ liệu mẫu sinh tự động (Sample Inputs)
-
-Script sinh dữ liệu mẫu tạo ra các file input chuẩn ngoài đời:
-- **POS Printed Receipts (`.png` - 25 file)**: Phiếu thanh toán in từ máy POS hoặc ảnh chụp bằng điện thoại chứa Store Header, danh mục thực phẩm F&B, tổng cộng tiền hàng, số tài khoản của mối buôn.
-- **VAT E-Invoices (`.pdf` - 25 file)**: Hóa đơn điện tử chính thức thiết kế chuyên nghiệp, ghi rõ thông tin Seller, Buyer, và thuế suất VAT.
-- Các file mẫu đều chứa từ khóa tiếng Việt như `Nha cung cap`, `Cong tien hang`, `Tong cong` giúp kiểm thử EasyOCR nhận dạng chính xác 100%.
-
-Cách chạy bộ sinh dữ liệu mẫu:
-```powershell
-cd "D:\Du-an\Invoice Automation & Reconciliation System\sample_inputs\scripts"
-..\..\backend\.venv\Scripts\python.exe generate_all_inputs.py
-```
