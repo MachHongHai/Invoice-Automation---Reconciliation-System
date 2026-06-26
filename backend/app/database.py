@@ -1,166 +1,131 @@
 from __future__ import annotations
 
 import os
-import sqlite3
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = BACKEND_DIR / "data"
 DEFAULT_UPLOAD_DIR = DEFAULT_DATA_DIR / "uploads"
 
-DATABASE_PATH = Path(os.getenv("DATABASE_PATH", DEFAULT_DATA_DIR / "finrecon.db"))
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", DEFAULT_UPLOAD_DIR))
+RAW_DATABASE_URL = os.getenv("DATABASE_URL")
+SQLITE_PATH = Path(os.getenv("DATABASE_PATH", DEFAULT_DATA_DIR / "finrecon.db"))
+
+
+def _database_url() -> str:
+    if RAW_DATABASE_URL:
+        if RAW_DATABASE_URL.startswith("postgresql://"):
+            return RAW_DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+        return RAW_DATABASE_URL
+    return f"sqlite:///{SQLITE_PATH.as_posix()}"
+
+
+DATABASE_URL = _database_url()
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 def ensure_storage() -> None:
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    if DATABASE_URL.startswith("sqlite"):
+        SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
-@contextmanager
-def get_connection() -> Iterator[sqlite3.Connection]:
+def get_db() -> Iterator[Session]:
     ensure_storage()
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    db = SessionLocal()
     try:
-        yield conn
-        conn.commit()
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
-        conn.close()
+        db.close()
 
 
 def init_db() -> None:
-    with get_connection() as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS uploaded_files (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_name TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                file_type TEXT,
-                file_category TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
+    ensure_storage()
+    from app import models  # noqa: F401
+    from app.seed import seed_defaults
 
-            CREATE TABLE IF NOT EXISTS processing_jobs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_id INTEGER,
-                job_type TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                error_message TEXT,
-                started_at TEXT,
-                finished_at TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(file_id) REFERENCES uploaded_files(id) ON DELETE SET NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS vendors (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                vendor_id TEXT,
-                vendor_name TEXT NOT NULL,
-                tax_code TEXT,
-                bank_account TEXT,
-                address TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS invoices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                invoice_number TEXT,
-                vendor_name TEXT,
-                vendor_tax_code TEXT,
-                invoice_date TEXT,
-                due_date TEXT,
-                subtotal REAL,
-                vat_amount REAL,
-                total_amount REAL,
-                currency TEXT DEFAULT 'VND',
-                status TEXT DEFAULT 'needs_review',
-                validation_status TEXT DEFAULT 'pending',
-                ocr_confidence REAL,
-                uploaded_file_id INTEGER,
-                processing_job_id INTEGER,
-                source_file_name TEXT,
-                source_file_path TEXT,
-                raw_text TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(uploaded_file_id) REFERENCES uploaded_files(id) ON DELETE SET NULL,
-                FOREIGN KEY(processing_job_id) REFERENCES processing_jobs(id) ON DELETE SET NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS bank_transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                transaction_id TEXT,
-                transaction_date TEXT,
-                description TEXT,
-                amount REAL NOT NULL,
-                direction TEXT,
-                bank_account TEXT,
-                reference_code TEXT,
-                validation_status TEXT DEFAULT 'pending',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS reconciliation_matches (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                invoice_id INTEGER,
-                bank_transaction_id INTEGER,
-                match_score REAL,
-                match_status TEXT,
-                amount_diff REAL,
-                date_diff INTEGER,
-                reason TEXT,
-                approved INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-                FOREIGN KEY(bank_transaction_id) REFERENCES bank_transactions(id) ON DELETE SET NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS reconciliation_exceptions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                invoice_id INTEGER,
-                bank_transaction_id INTEGER,
-                exception_type TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                message TEXT NOT NULL,
-                resolved INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-                FOREIGN KEY(bank_transaction_id) REFERENCES bank_transactions(id) ON DELETE SET NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action TEXT NOT NULL,
-                entity_type TEXT,
-                entity_id INTEGER,
-                details TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS ai_reports (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                report_type TEXT,
-                report_content TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-        )
-        _ensure_column(conn, "invoices", "uploaded_file_id", "INTEGER")
-        _ensure_column(conn, "invoices", "processing_job_id", "INTEGER")
-        _ensure_column(conn, "bank_transactions", "validation_status", "TEXT DEFAULT 'pending'")
+    Base.metadata.create_all(bind=engine)
+    if DATABASE_URL.startswith("sqlite"):
+        _sqlite_compat_migration()
+    with SessionLocal() as db:
+        seed_defaults(db)
+        db.commit()
 
 
-def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
-    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
-    if column not in columns:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+def _sqlite_compat_migration() -> None:
+    import sqlite3
 
-
-def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
-    return [dict(row) for row in rows]
+    table_columns: dict[str, dict[str, str]] = {
+        "vendors": {
+            "company_id": "INTEGER",
+            "bank_name": "VARCHAR(128)",
+            "bank_account_holder": "VARCHAR(255)",
+            "email": "VARCHAR(255)",
+            "phone": "VARCHAR(64)",
+            "category": "VARCHAR(64)",
+            "status": "VARCHAR(32) DEFAULT 'active'",
+        },
+        "invoice_batches": {},
+        "sample_generated_files": {},
+        "uploaded_files": {"company_id": "INTEGER", "batch_id": "INTEGER"},
+        "processing_jobs": {"company_id": "INTEGER", "batch_id": "INTEGER"},
+        "invoices": {
+            "company_id": "INTEGER",
+            "batch_id": "INTEGER",
+            "invoice_id": "VARCHAR(128)",
+            "invoice_series": "VARCHAR(64)",
+            "invoice_template_code": "VARCHAR(64)",
+            "vendor_id": "VARCHAR(64)",
+            "vendor_bank_account": "VARCHAR(64)",
+            "buyer_name": "VARCHAR(255)",
+            "buyer_tax_code": "VARCHAR(64)",
+            "vat_rate": "FLOAT",
+            "source_type": "VARCHAR(64)",
+            "attachment_file": "VARCHAR(255)",
+            "expected_case": "VARCHAR(128)",
+        },
+        "bank_transactions": {
+            "company_id": "INTEGER",
+            "batch_id": "INTEGER",
+            "value_date": "DATE",
+            "account_number": "VARCHAR(64)",
+            "currency": "VARCHAR(8) DEFAULT 'VND'",
+            "balance_after": "FLOAT",
+            "counterparty_name": "VARCHAR(255)",
+            "counterparty_account": "VARCHAR(64)",
+            "expected_case": "VARCHAR(128)",
+        },
+        "reconciliation_matches": {"reviewed_by": "INTEGER", "updated_at": "DATETIME"},
+        "reconciliation_exceptions": {
+            "status": "VARCHAR(32) DEFAULT 'open'",
+            "note": "TEXT",
+            "assigned_to": "INTEGER",
+            "updated_at": "DATETIME",
+        },
+        "audit_logs": {"user_id": "INTEGER"},
+    }
+    with sqlite3.connect(SQLITE_PATH) as conn:
+        for table, columns in table_columns.items():
+            existing_tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if table not in existing_tables:
+                continue
+            existing_columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            for column, definition in columns.items():
+                if column not in existing_columns:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

@@ -25,7 +25,15 @@ def _text_ratio(left: str, right: str) -> float:
     return SequenceMatcher(None, left_norm, right_norm).ratio() * 100
 
 
-def calculate_match_score(invoice: dict[str, Any], transaction: dict[str, Any]) -> dict[str, Any]:
+DEFAULT_RULES = {
+    "auto_match_threshold": 85,
+    "manual_review_threshold": 60,
+    "date_tolerance_days": 30,
+    "amount_tolerance_vnd": 500000,
+}
+
+
+def calculate_match_score(invoice: dict[str, Any], transaction: dict[str, Any], rules: dict[str, Any] | None = None) -> dict[str, Any]:
     score = 0.0
     total = abs(float(invoice.get("total_amount") or 0))
     amount = abs(float(transaction.get("amount") or 0))
@@ -67,23 +75,27 @@ def calculate_match_score(invoice: dict[str, Any], transaction: dict[str, Any]) 
     }
 
 
-def is_reconciliation_candidate(invoice: dict[str, Any], transaction: dict[str, Any]) -> bool:
+def is_reconciliation_candidate(invoice: dict[str, Any], transaction: dict[str, Any], rules: dict[str, Any] | None = None) -> bool:
+    rules = {**DEFAULT_RULES, **(rules or {})}
     if (transaction.get("direction") or "outflow").lower() != "outflow":
         return False
 
     metrics = calculate_match_score(invoice, transaction)
     date_diff = metrics.get("date_diff")
-    if date_diff is None or date_diff > 30:
+    if date_diff is None or date_diff > int(rules["date_tolerance_days"]):
         return False
-    return float(metrics["amount_diff"]) <= 500000
+    return float(metrics["amount_diff"]) <= float(rules["amount_tolerance_vnd"])
 
 
-def classify_match(score: float, amount_diff: float) -> str:
-    if score >= 85 and amount_diff == 0:
+def classify_match(score: float, amount_diff: float, rules: dict[str, Any] | None = None) -> str:
+    rules = {**DEFAULT_RULES, **(rules or {})}
+    auto_threshold = float(rules["auto_match_threshold"])
+    review_threshold = float(rules["manual_review_threshold"])
+    if score >= auto_threshold and amount_diff == 0:
         return "matched"
-    if score >= 85 and amount_diff > 0:
+    if score >= auto_threshold and amount_diff > 0:
         return "amount_mismatch"
-    if score >= 60:
+    if score >= review_threshold:
         return "partially_matched"
     return "unmatched"
 

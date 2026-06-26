@@ -7,9 +7,20 @@ from typing import Any
 from app.utils import normalize_text, parse_date
 
 
+VI_STOP_WORDS = {"thanh toan", "tien", "ck", "chuyen khoan", "tra", "cho", "mua", "ban"}
+
+def _remove_stop_words(text: str) -> str:
+    for word in VI_STOP_WORDS:
+        text = text.replace(f" {word} ", " ")
+        if text.startswith(f"{word} "):
+            text = text[len(word)+1:]
+        if text.endswith(f" {word}"):
+            text = text[:-len(word)-1]
+    return text.strip()
+
 def fuzzy_similarity(left: str | None, right: str | None) -> float:
-    left_norm = normalize_text(left)
-    right_norm = normalize_text(right)
+    left_norm = _remove_stop_words(normalize_text(left))
+    right_norm = _remove_stop_words(normalize_text(right))
     if not left_norm or not right_norm:
         return 0.0
     if left_norm in right_norm or right_norm in left_norm:
@@ -32,8 +43,12 @@ def validate_invoice(
     invoice: dict[str, Any],
     vendors: list[dict[str, Any]],
     duplicate_count: int = 1,
+    rules: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
+    rules = rules or {}
+    vat_tolerance = float(rules.get("vat_tolerance", 1))
+    low_ocr_threshold = float(rules.get("low_ocr_confidence_threshold", 80))
 
     if not invoice.get("invoice_number"):
         issues.append(
@@ -86,7 +101,7 @@ def validate_invoice(
 
     if subtotal is not None and vat is not None and total is not None:
         diff = abs((float(subtotal) + float(vat)) - float(total))
-        if diff > 1:
+        if diff > vat_tolerance:
             issues.append(
                 {
                     "type": "amount_mismatch",
@@ -114,12 +129,12 @@ def validate_invoice(
         )
 
     confidence = invoice.get("ocr_confidence")
-    if confidence is not None and float(confidence) < 80:
+    if confidence is not None and float(confidence) < low_ocr_threshold:
         issues.append(
             {
                 "type": "low_ocr_confidence",
                 "severity": "low",
-                "message": f"OCR confidence is {float(confidence):.1f}%, below the 80% review threshold.",
+                "message": f"OCR confidence is {float(confidence):.1f}%, below the {low_ocr_threshold:.0f}% review threshold.",
             }
         )
 

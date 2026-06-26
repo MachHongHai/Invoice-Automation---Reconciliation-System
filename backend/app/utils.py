@@ -4,6 +4,7 @@ import csv
 import io
 import re
 import unicodedata
+import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -113,12 +114,79 @@ def normalize_text(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _xml_text(root: ET.Element, paths: tuple[str, ...]) -> str | None:
+    for path in paths:
+        found = root.find(path)
+        if found is not None and found.text and found.text.strip():
+            return found.text.strip()
+    return None
+
+
+def parse_vietnam_einvoice_xml(content: bytes) -> dict[str, Any]:
+    text = decode_bytes(content).strip()
+    if not text:
+        return {}
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return {}
+
+    def pick(*paths: str) -> str | None:
+        clean_paths = []
+        for path in paths:
+            clean_paths.append(path)
+            clean_paths.append(f".//{{*}}{path.rsplit('/', 1)[-1]}")
+        return _xml_text(root, tuple(clean_paths))
+
+    title = pick(".//TTChung/THDon", "THDon") or ""
+    template_code = pick(".//TTChung/KHMSHDon", "KHMSHDon")
+    subtotal = parse_amount(pick(".//TToan/TgTCThue", "TgTCThue"))
+    vat_amount = parse_amount(pick(".//TToan/TgTThue", "TgTThue"))
+    total_amount = parse_amount(pick(".//TToan/TgTTTBSo", "TgTTTBSo"))
+    vat_rate_text = pick(".//HHDVu/TSuat", "TSuat") or ""
+    vat_rate = None
+    if vat_rate_text and vat_rate_text not in {"KCT", "KKKNT", "KHAC"}:
+        vat_rate = (parse_amount(vat_rate_text) or 0) / 100
+
+    source_type = "vat_einvoice" if template_code == "1" or "GIA TRI GIA TANG" in normalize_text(title).upper() else "sales_einvoice"
+    invoice_number = pick(".//TTChung/SHDon", "SHDon")
+    invoice_series = pick(".//TTChung/KHHDon", "KHHDon")
+    invoice_id = f"XML-{invoice_series}-{invoice_number}" if invoice_series and invoice_number else None
+
+    return {
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "invoice_series": invoice_series,
+        "invoice_template_code": template_code,
+        "vendor_name": pick(".//NBan/Ten", "NBan/Ten"),
+        "vendor_tax_code": pick(".//NBan/MST", "NBan/MST"),
+        "vendor_bank_account": pick(".//NBan/STKNHang", "NBan/STKNHang"),
+        "buyer_name": pick(".//NMua/Ten", "NMua/Ten"),
+        "buyer_tax_code": pick(".//NMua/MST", "NMua/MST"),
+        "invoice_date": parse_date(pick(".//TTChung/NLap", "NLap")),
+        "subtotal": subtotal,
+        "vat_rate": vat_rate,
+        "vat_amount": vat_amount,
+        "total_amount": total_amount,
+        "currency": (pick(".//TTChung/DVTTe", "DVTTe") or "VND").upper(),
+        "source_type": source_type,
+        "raw_text": text,
+    }
+
+
 def extract_invoice_fields(text: str, fallback_name: str = "") -> dict[str, Any]:
     haystack = f"{text}\n{fallback_name}"
     invoice_number = None
-    invoice_match = re.search(r"\b(?:INV|HD|BILL)[-\s_/]?\d{4}[-\s_/]?\d{2,6}\b", haystack, re.IGNORECASE)
+    invoice_match = re.search(r"\b(?:INV|HD|BILL|REC)[-\s_/]?\d{2,8}[-\s_/]?\d{2,8}\b", haystack, re.IGNORECASE)
     if invoice_match:
         invoice_number = re.sub(r"\s+", "-", invoice_match.group(0).upper())
+    if not invoice_number:
+        labelled = re.search(
+            r"(?i)(?:so\s*hoa\s*don|so\s*hd|ma\s*phieu|ma\s*bien\s*nhan|receipt\s*no)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-_/]{2,30})",
+            haystack,
+        )
+        if labelled:
+            invoice_number = labelled.group(1).upper()
 
     date_value = None
     date_match = re.search(r"\b(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})\b", haystack)
@@ -127,11 +195,18 @@ def extract_invoice_fields(text: str, fallback_name: str = "") -> dict[str, Any]
 
     vendor_name = None
     vendor_match = re.search(
-        r"(?im)^(?:nguoi\s*ban|seller|vendor|nha\s*cung\s*cap)\s*[:\-]\s*(.+)$",
+        r"(?im)^(?:nguoi\s*ban|nguoi\s*ban\s*hang|seller|vendor|moi\s*buon|nha\s*cung\s*cap)\s*[:\-]\s*(.+)$",
         haystack,
     )
     if vendor_match:
         vendor_name = vendor_match.group(1).strip()
+    if not vendor_name:
+        for line in haystack.splitlines()[:5]:
+            candidate = line.strip(" :-")
+            normalized = normalize_text(candidate)
+            if candidate and "hoa don ban hang" not in normalized and "dia chi" not in normalized and "dt" != normalized:
+                vendor_name = candidate
+                break
 
     vendor_tax_code = None
     tax_match = re.search(
@@ -151,7 +226,8 @@ def extract_invoice_fields(text: str, fallback_name: str = "") -> dict[str, Any]
 
     total_amount = None
     total_patterns = (
-        r"(?i)(?:total\s+amount|grand\s+total|amount\s+due|tong\s+thanh\s+toan|tong\s+cong)[^\d]{0,20}([0-9][0-9.,\s]*)",
+        r"(?i)(?:total\s+amount|grand\s+total|amount\s+due|tong\s+tien\s+thanh\s+toan|tong\s+thanh\s+toan|tong\s+cong|thanh\s+toan|phai\s+tra)[^\d]{0,20}([0-9][0-9.,\s]*)",
+        r"(?i)(?:thanh\s*tien)[^\d]{0,20}([0-9][0-9.,\s]*)\s*(?:vnd|dong)?",
         r"(?i)(?:total)[^\d]{0,20}([0-9][0-9.,\s]*)",
     )
     for pattern in total_patterns:
@@ -175,9 +251,17 @@ def extract_invoice_fields(text: str, fallback_name: str = "") -> dict[str, Any]
         "invoice_number": invoice_number,
         "vendor_name": vendor_name,
         "vendor_tax_code": vendor_tax_code,
+        "vendor_bank_account": vendor_bank_account,
         "invoice_date": date_value,
         "subtotal": subtotal,
         "total_amount": total_amount,
         "vat_amount": vat_amount,
         "currency": currency,
     }
+    vendor_bank_account = None
+    bank_match = re.search(
+        r"(?i)(?:so\s*tai\s*khoan|stk|bank\s*account)\s*[:\-]?\s*([0-9]{6,24})",
+        haystack,
+    )
+    if bank_match:
+        vendor_bank_account = bank_match.group(1)
