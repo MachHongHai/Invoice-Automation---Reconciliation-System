@@ -153,7 +153,15 @@ def yaml_path(path: Path) -> str:
     return path.resolve().as_posix()
 
 
-def write_config(output_dir: Path, epoch_num: int, eval_step: int, batch_size: int) -> None:
+def write_config(
+    output_dir: Path,
+    epoch_num: int,
+    eval_step: int,
+    batch_size: int,
+    learning_rate: float,
+    warmup_epoch: int,
+    clip_norm_global: float,
+) -> None:
     config_path = output_dir / "ser_vi_layoutxlm_finrecon_4field.yml"
     save_dir = output_dir / "output" / "ser_vi_layoutxlm_finrecon_4field"
     pretrained_dir = output_dir / "pretrained"
@@ -203,11 +211,12 @@ Optimizer:
   name: AdamW
   beta1: 0.9
   beta2: 0.999
+  clip_norm_global: {clip_norm_global}
   lr:
     name: Linear
-    learning_rate: 0.00005
+    learning_rate: {learning_rate}
     epochs: *epoch_num
-    warmup_epoch: 2
+    warmup_epoch: {warmup_epoch}
   regularizer:
     name: L2
     factor: 0.00000
@@ -331,26 +340,24 @@ def write_training_readme(output_dir: Path, stats: dict[str, dict[str, int]]) ->
     lines.extend(
         [
             "",
-            "## Cach train",
-            "",
-            "Nen chay trong mot moi truong rieng cho PaddleOCR, khong cai vao backend venv cua web app.",
-            "",
-            "Vi du:",
-            "",
-            "```powershell",
-            "git clone https://github.com/PaddlePaddle/PaddleOCR.git D:\\PaddleOCR",
-            "cd D:\\PaddleOCR",
-            "# cai paddlepaddle/paddleocr/paddlenlp theo tai lieu PaddleOCR va phien ban Python phu hop",
-            f"python tools/train.py -c \"{(output_dir / 'ser_vi_layoutxlm_finrecon_4field.yml').resolve()}\"",
-            "```",
-            "",
-            "Neu train CPU de test pipeline, co the override:",
-            "",
-            "```powershell",
-            f"python tools/train.py -c \"{(output_dir / 'ser_vi_layoutxlm_finrecon_4field.yml').resolve()}\" -o Global.use_gpu=False",
-            "```",
-            "",
-            "Luu y: LayoutXLM train CPU se rat cham. Nen dung GPU neu muon train that.",
+        "## Cach train",
+        "",
+        "Nen chay trong mot moi truong rieng cho PaddleOCR, khong cai vao backend venv cua web app.",
+        "",
+        "Trong repo nay, dung script da cau hinh cache/checkpoint tren o D va validate dataset truoc train:",
+        "",
+        "```powershell",
+        ".\\tools\\paddleocr_train_gpu.ps1",
+        "```",
+        "",
+        "Danh gia best checkpoint tren test split:",
+        "",
+        "```powershell",
+        ".\\tools\\paddleocr_eval_ser.ps1 -Split test",
+        "```",
+        "",
+        "Config mac dinh dung 6 epoch, learning rate 2e-5, warmup 1 epoch, global grad clip 1.0.",
+        "Luu y: LayoutXLM train CPU se rat cham. Nen dung GPU neu muon train that.",
         ]
     )
     (output_dir / "README_TRAINING.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
@@ -377,7 +384,15 @@ def export(args: argparse.Namespace) -> None:
             copy_mode=args.copy_mode,
         )
     write_class_list(output_dir)
-    write_config(output_dir, args.epoch_num, args.eval_step, args.batch_size)
+    write_config(
+        output_dir=output_dir,
+        epoch_num=args.epoch_num,
+        eval_step=args.eval_step,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        warmup_epoch=args.warmup_epoch,
+        clip_norm_global=args.clip_norm_global,
+    )
     write_training_readme(output_dir, stats)
     print(f"Wrote PaddleOCR SER dataset to {output_dir}")
     for split_name, split_stats in stats.items():
@@ -388,12 +403,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Export prepared receipt dataset to PaddleOCR SER format.")
     parser.add_argument(
         "--dataset-dir",
-        default="archive/prepared/finrecon_receipt_4field",
+        default="archive/prepared/finrecon_receipt_4field_clean",
         help="Prepared 4-field dataset directory.",
     )
     parser.add_argument(
         "--output-dir",
-        default="archive/prepared/finrecon_receipt_4field/paddleocr_ser",
+        default="archive/prepared/finrecon_receipt_4field_clean/paddleocr_ser",
         help="Output PaddleOCR SER dataset directory.",
     )
     parser.add_argument(
@@ -403,9 +418,22 @@ def main() -> None:
         help="How to populate PaddleOCR images directory.",
     )
     parser.add_argument("--clear", action="store_true", help="Clear output directory before export.")
-    parser.add_argument("--epoch-num", type=int, default=200, help="Epoch count for generated train config.")
-    parser.add_argument("--eval-step", type=int, default=200, help="Evaluation step interval for generated train config.")
+    parser.add_argument("--epoch-num", type=int, default=6, help="Epoch count for generated train config.")
+    parser.add_argument("--eval-step", type=int, default=250, help="Evaluation step interval for generated train config.")
     parser.add_argument("--batch-size", type=int, default=2, help="Batch size per GPU card for generated train config.")
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=0.00002,
+        help="AdamW learning rate. Keep conservative for small SER datasets.",
+    )
+    parser.add_argument("--warmup-epoch", type=int, default=1, help="Linear warmup epochs.")
+    parser.add_argument(
+        "--clip-norm-global",
+        type=float,
+        default=1.0,
+        help="Global gradient clipping norm passed to PaddleOCR optimizer.",
+    )
     export(parser.parse_args())
 
 

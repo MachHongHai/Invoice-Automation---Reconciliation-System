@@ -72,7 +72,7 @@ Hướng train:
 - PaddleOCR SER clean export: `archive/prepared/finrecon_receipt_4field_clean/paddleocr_ser`
 - Class list: `OTHER`, `SELLER`, `ADDRESS`, `TIMESTAMP`, `TOTAL_COST`
 
-Config train GPU mặc định hiện trỏ vào dataset clean 10 epoch. Rule clean hiện tại giữ keyword/context như "Tổng cộng", "Thanh toán", "Ngày bán", "Thời gian" nếu annotation có text và geometry hợp lệ; không demote `TOTAL_COST` vì thiếu số tiền và không demote `TIMESTAMP` vì thiếu ngày/giờ. `boxes_and_transcripts` trong MC-OCR có nhiều transcript rỗng, nên prepare script dùng `mcocr_train_df.csv` làm nguồn target text chính thức: recover box target rỗng khi bbox overlap tốt, append CSV target annotation còn thiếu, và bỏ qua box `OTHER` rỗng. Chưa tích hợp model trained vào web app cho tới khi có prediction report đủ tin cậy.
+Config train GPU mặc định hiện trỏ vào dataset clean với cấu hình conservative: 6 epoch, eval mỗi 250 step, learning rate `2e-5`, warmup 1 epoch, global grad clip `1.0`. `tools/paddleocr_train_gpu.ps1` validate PaddleOCR SER dataset trước khi train; `tools/paddleocr_eval_ser.ps1` dùng để đánh giá best checkpoint trên `train`/`val`/`test`. Rule clean hiện tại giữ keyword/context như "Tổng cộng", "Thanh toán", "Ngày bán", "Thời gian" nếu annotation có text và geometry hợp lệ; không demote `TOTAL_COST` vì thiếu số tiền và không demote `TIMESTAMP` vì thiếu ngày/giờ. `boxes_and_transcripts` trong MC-OCR có nhiều transcript rỗng, nên prepare script dùng `mcocr_train_df.csv` làm nguồn target text chính thức: recover box target rỗng khi bbox overlap tốt, append CSV target annotation còn thiếu, và bỏ qua box `OTHER` rỗng. Chưa tích hợp model trained vào web app cho tới khi có prediction report đủ tin cậy.
 
 ## Cách chạy
 

@@ -118,7 +118,7 @@ Test GPU:
 .\tools\paddleocr_gpu_check.ps1
 ```
 
-Train GPU quick 10 epoch tren dataset clean:
+Train GPU quick tren dataset clean. Script se validate PaddleOCR SER dataset truoc khi train:
 
 ```powershell
 .\tools\paddleocr_train_gpu.ps1
@@ -127,9 +127,15 @@ Train GPU quick 10 epoch tren dataset clean:
 Tao lai dataset clean va PaddleOCR SER export:
 
 ```powershell
-python tools\clean_receipt_4field_dataset.py --clear --copy-mode hardlink
-python tools\export_paddleocr_ser_dataset.py --dataset-dir archive\prepared\finrecon_receipt_4field_clean --output-dir archive\prepared\finrecon_receipt_4field_clean\paddleocr_ser --copy-mode hardlink --clear --epoch-num 10 --eval-step 500 --batch-size 2
-python tools\validate_paddleocr_ser_dataset.py archive\prepared\finrecon_receipt_4field_clean\paddleocr_ser
+python tools\clean_receipt_4field_dataset.py --copy-mode hardlink
+python tools\export_paddleocr_ser_dataset.py --dataset-dir archive\prepared\finrecon_receipt_4field_clean --output-dir archive\prepared\finrecon_receipt_4field_clean\paddleocr_ser --copy-mode hardlink --epoch-num 6 --eval-step 250 --batch-size 2 --learning-rate 0.00002 --warmup-epoch 1 --clip-norm-global 1.0
+python tools\validate_paddleocr_ser_dataset.py --dataset-dir archive\prepared\finrecon_receipt_4field_clean\paddleocr_ser
+```
+
+Danh gia best checkpoint tren test split sau khi train:
+
+```powershell
+.\tools\paddleocr_eval_ser.ps1 -Split test
 ```
 
 Ghi chu: `boxes_and_transcripts` cua MC-OCR co nhieu transcript rong, ke ca box target field. Pipeline prepare hien dung `mcocr_train_df.csv` lam nguon text chinh thuc cho `SELLER`, `ADDRESS`, `TIMESTAMP`, `TOTAL_COST`: box target rong se duoc recover bang CSV neu bbox overlap tot, annotation CSV con thieu se duoc append vao `boxes`, va box `OTHER` rong bi bo qua. Rule clean khong demote `TOTAL_COST` vi thieu so tien va khong demote `TIMESTAMP` vi thieu ngay/gio.

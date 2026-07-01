@@ -18,7 +18,7 @@ FIELD_BY_LABEL = {
     "TIMESTAMP": "timestamp",
     "TOTAL_COST": "total_cost",
 }
-MOJIBAKE_RE = re.compile(r"(?:Ãƒ|Ã„|Ã‚|Ã†|Ã¡Â»|Ã¡Âº|Ã„â€˜|Ã†Â°|Ã†Â¡|Ã…)")
+MOJIBAKE_RE = re.compile(r"(?:Ã|Ä|Æ|á»|áº|[\x80-\x9f]|�)")
 DATE_RE = re.compile(
     r"\b(?:\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2})\b"
 )
@@ -30,15 +30,47 @@ def mojibake_score(text: str) -> int:
     return len(MOJIBAKE_RE.findall(text)) if text else 0
 
 
-def repair_text(text: str | None) -> tuple[str, bool]:
-    if not text:
-        return "", False
+def mojibake_bytes(text: str) -> bytes:
+    buffer = bytearray()
+    for char in text:
+        codepoint = ord(char)
+        if codepoint <= 255:
+            buffer.append(codepoint)
+            continue
+        try:
+            buffer.extend(char.encode("cp1252"))
+        except UnicodeEncodeError:
+            buffer.extend(char.encode("utf-8"))
+    return bytes(buffer)
+
+
+def repair_once(text: str) -> list[str]:
     candidates = [text]
     for encoding in ("latin1", "cp1252"):
         try:
             candidates.append(text.encode(encoding).decode("utf-8"))
         except UnicodeError:
             pass
+    try:
+        candidates.append(mojibake_bytes(text).decode("utf-8"))
+    except UnicodeError:
+        pass
+    return candidates
+
+
+def repair_text(text: str | None) -> tuple[str, bool]:
+    if not text:
+        return "", False
+    candidates = [text]
+    frontier = [text]
+    for _ in range(2):
+        next_frontier: list[str] = []
+        for candidate in frontier:
+            for repaired in repair_once(candidate):
+                if repaired not in candidates:
+                    candidates.append(repaired)
+                    next_frontier.append(repaired)
+        frontier = next_frontier
     best = min(candidates, key=lambda item: (mojibake_score(item), -len(item)))
     return best, best != text and mojibake_score(best) < mojibake_score(text)
 
